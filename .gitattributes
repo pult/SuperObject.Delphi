@@ -1,0 +1,43 @@
+#
+# https://github.com/git/git/blob/master/Documentation/gitattributes.txt
+#
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Custom for Delphi
+*.pas	text eol=crlf
+*.inc	text eol=crlf
+*.dpr	text eol=crlf
+*.dpk	text eol=crlf
+*.txt	text eol=crlf
+*.rc	text eol=crlf
+*.ini	text eol=crlf
+
+# Custom for FreePascal / Lazarus
+*.pp	text eol=lf
+*.lpk	text eol=lf
+*.lrs	text eol=lf
+
+# Custom for Windows
+*.cmd	text eol=crlf
+*.bat	text eol=crlf
+
+# Custom for Visual Studio
+*.cs     diff=csharp
+*.sln    merge=union
+*.csproj merge=union
+*.vbproj merge=union
+*.fsproj merge=union
+*.dbproj merge=union
+
+# Standard to msysgit
+*.doc	 diff=astextplain
+*.DOC	 diff=astextplain
+*.docx diff=astextplain
+*.DOCX diff=astextplain
+*.dot  diff=astextplain
+*.DOT  diff=astextplain
+*.pdf  diff=astextplain
+*.PDF	 diff=astextplain
+*.rtf	 diff=astextplain
+*.RTF	 diff=astextplain
