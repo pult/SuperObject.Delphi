@@ -1,3 +1,4 @@
+{ superobject.pas } // version: 2020.1020.1320
 (*
  *                         Super Object Toolkit
  *
@@ -8823,7 +8824,18 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
     begin
       if ObjectIsType(o, stArray) and (ArrayData.Dims[dim-1] <> nil) then
       begin
+        {$IFDEF FPC}
         a := @GetTypeData(ArrayData.Dims[dim-1]^).ArrayData;
+        {$ELSE}
+        {$IF CompilerVersion >= 34.00}
+        a := PTypeData( // TODO: check
+             @GetTypeData(ArrayData.Dims[dim-1]^).ArrayData
+        );
+        {$ELSE}
+        a := @GetTypeData(ArrayData.Dims[dim-1]^).ArrayData;
+        {$IFEND}
+        {$ENDIF}
+
         if (a.MaxValue - a.MinValue + 1) <> o.AsArray.Length then
         begin
           Result := False;
