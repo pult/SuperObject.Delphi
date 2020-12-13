@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1213.1945
+{ superobject.pas } // version: 2020.1213.1955
 (*
  *                         Super Object Toolkit
  *
@@ -2258,7 +2258,14 @@ end;
 function serialfromboolean(ctx: TSuperRttiContext; const obj: ISuperObject; var Value: TValue): Boolean;
 var
   o: ISuperObject;
+  S: string;
 begin
+  if obj = nil then // https://github.com/hgourvest/superobject/pull/46
+  begin
+    TValueData(Value).FAsSLong := Ord(False);
+    Result := True;
+    Exit;
+  end;
   case ObjectGetType(obj) of
   stBoolean:
     begin
@@ -2275,7 +2282,20 @@ begin
       o := SO(obj.AsString);
       if not ObjectIsType(o, stString) then
         Result := serialfromboolean(ctx, SO(obj.AsString), Value) else
-        Result := False;
+      begin // https://github.com/hgourvest/superobject/pull/46
+        S := obj.AsString;
+        if (S = '1') or (S = '-1') or SameText(S, 'True') then
+        begin
+          TValueData(Value).FAsSLong := Ord(True);
+          Result := True;
+        end
+        else if (S = '0') or SameText(S, 'False') then
+        begin
+          TValueData(Value).FAsSLong := Ord(False);
+          Result := True;
+        end else
+          Result := False;
+      end;
     end;
   else
     Result := False;
@@ -6709,9 +6729,7 @@ begin
   if (index < FLength) then
   begin
     if FLength = FSize then
-      {+}
       Expand(FLength+1); // https://github.com/hgourvest/superobject/pull/16
-      {+.}
     if Index < FLength then
       Move(FArray^[index], FArray^[index + 1],
         (FLength - index) * SizeOf(Pointer));
