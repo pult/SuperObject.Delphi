@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1213.1955
+{ superobject.pas } // version: 2020.1213.2045
 (*
  *                         Super Object Toolkit
  *
@@ -1164,6 +1164,14 @@ type
     Ite: TSuperAvlIterator;
   end;
 
+  {$if not declared(TStringDynArray)}
+    {$IFDEF HAVE_RTTI}
+  TStringDynArray       = TArray<string>;
+    {$ELSE}
+  TStringDynArray       = array of string;
+    {$ENDIF}
+  {$ifend}
+
 function ObjectIsError(obj: TSuperObject): boolean;
 function ObjectIsType(const obj: ISuperObject; typ: TSuperType): boolean;
 function ObjectGetType(const obj: ISuperObject): TSuperType;
@@ -1181,6 +1189,7 @@ function soStream(stream: TStream; ACodePage: Integer = CP_UNKNOWN): ISuperObjec
 function soFile(const FileName: string; ACodePage: Integer = CP_UNKNOWN): ISuperObject;
 {+.}
 function SA(const Args: array of const): ISuperObject; overload;
+function SA(const AStrings: TStringDynArray): ISuperObject; overload;
 {+}
 function SA(const s: SOString = '[]'): ISuperObject; overload;
 {+.}
@@ -1698,7 +1707,8 @@ begin
         if TVarRec(Args[j]).VInterface = nil then
           Add(nil) else
           if IInterface(TVarRec(Args[j]).VInterface).QueryInterface(ISuperObject, intf) = 0 then
-            Add(ISuperObject(intf)) else
+            //Add(ISuperObject(intf)) else
+            Add(TSuperObject(intf)) else // https://github.com/hgourvest/superobject/pull/39 // TODO: test it
             Add(nil);
       vtPointer :
         if TVarRec(Args[j]).VPointer = nil then
@@ -1727,6 +1737,15 @@ begin
     else
       assert(false);
     end;
+end;
+
+function SA(const AStrings: TStringDynArray): ISuperObject; overload;
+var // https://github.com/hgourvest/superobject/pull/39
+  i: integer;
+begin
+  Result := TSuperObject.Create(stArray);
+  for i := 0 to High(AStrings) do
+    Result.AsArray.Add(TSuperObject.Create(AStrings[i]));
 end;
 
 {+}
@@ -2620,6 +2639,7 @@ end;
 
 constructor TSuperEnumerator.Create(const obj: ISuperObject);
 begin
+  inherited Create;
   FObj := obj;
   FCount := -1;
   if ObjectIsType(FObj, stObject) then
@@ -2629,11 +2649,9 @@ end;
 
 destructor TSuperEnumerator.Destroy;
 begin
-  if FObjEnum <> nil then
-  begin
-    FObjEnum.Free;
-    FObjEnum := nil;
-  end;
+  if Assigned(FObjEnum) then
+    FreeAndNil(FObjEnum);
+  inherited;
 end;
 
 function TSuperEnumerator.MoveNext: Boolean;
@@ -2727,8 +2745,7 @@ begin
       {+}
       if Assigned(FO.c_object) then
       begin
-        FO.c_object.Free;
-        FO.c_object := nil;
+        FreeAndNil(FO.c_object);
       end;
       {+.}
     stArray:
@@ -5442,7 +5459,8 @@ end;
 
 procedure TSuperObject.Clear(all: boolean);
 begin
-  if FProcessing then exit;
+  if FProcessing then
+    Exit;
   FProcessing := true;
   try
     case FDataType of
@@ -6743,14 +6761,18 @@ end;
 procedure TSuperArray.Clear(all: boolean);
 var
   j: Integer;
+  so: ^ISuperObject;
 begin
-  for j := 0 to FLength - 1 do
-    if FArray^[j] <> nil then
+  for j := FLength - 1 downto 0 do
+  begin
+    so := @FArray^[j];
+    if Assigned(so^) then
     begin
       if all then
-        FArray^[j].Clear(all);
-      FArray^[j] := nil;
+        so^.Clear(all);
+      so^ := nil;
     end;
+  end;
   FLength := 0;
 end;
 
@@ -6799,8 +6821,12 @@ end;
 
 destructor TSuperArray.Destroy;
 begin
-  Clear;
-  FreeMem(FArray);
+  Clear((*?{all:}True*)); // TODO: ?all
+  if Assigned(FArray) then
+  begin
+    FreeMem(FArray);
+    FArray := nil;
+  end;
   inherited;
 end;
 
@@ -6993,8 +7019,11 @@ end;
 destructor TSuperWriterString.Destroy;
 begin
   inherited;
-  if FBuf <> nil then
-    FreeMem(FBuf)
+  if Assigned(FBuf) then
+  begin
+    FreeMem(FBuf);
+    FBuf := nil;
+  end;
 end;
 
 function TSuperWriterString.GetString: SOString;
@@ -7204,7 +7233,7 @@ end;
 
 constructor TSuperWriterFake.Create;
 begin
-  inherited Create;
+  inherited;
   FSize := 0;
 end;
 
@@ -7314,16 +7343,17 @@ end;
 
 constructor TSuperTokenizer.Create;
 begin
+  inherited;
   pb := TSuperWriterString.Create;
   line := 1;
   col := 0;
-  Reset;
+  Reset();
 end;
 
 destructor TSuperTokenizer.Destroy;
 begin
-  Reset;
-  pb.Free;
+  Reset();
+  FreeAndNil(pb);
   inherited;
 end;
 
@@ -7354,17 +7384,18 @@ constructor TSuperAvlTree.Create;
 begin
   FRoot := nil;
   FCount := 0;
+  inherited;
 end;
 
 destructor TSuperAvlTree.Destroy;
 begin
-  Clear;
+  Clear((*?{all:}True*)); // TODO: ?all
   inherited;
 end;
 
 function TSuperAvlTree.IsEmpty: boolean;
 begin
-  result := FRoot = nil;
+  Result := FRoot = nil;
 end;
 
 function TSuperAvlTree.balance(bal: TSuperAvlEntry): TSuperAvlEntry;
@@ -7892,6 +7923,7 @@ end;
 
 constructor TSuperAvlIterator.Create(tree: TSuperAvlTree);
 begin
+  inherited Create;
   FDepth := not 0;
   FTree := tree;
 end;
@@ -8089,6 +8121,7 @@ end;
 
 constructor TSuperAvlEntry.Create(const AName: SOString; Obj: Pointer);
 begin
+  inherited Create;
   FName := AName;
   FPtr := Obj;
   FHash := Hash(FName);
@@ -8334,6 +8367,7 @@ end;
 
 constructor TSuperAttribute.Create(const AName: string);
 begin
+  inherited Create;
   FName := AName;
 end;
 
@@ -8387,6 +8421,7 @@ end;
 
 constructor TSuperRttiContext.Create;
 begin
+  inherited;
   Context := TRttiContext.Create;
   SerialFromJson := TDictionary<PTypeInfo, TSerialFromJson>.Create;
   SerialToJson := TDictionary<PTypeInfo, TSerialToJson>.Create;
@@ -8407,9 +8442,10 @@ end;
 
 destructor TSuperRttiContext.Destroy;
 begin
-  SerialFromJson.Free;
-  SerialToJson.Free;
-  Context.Free;
+  FreeAndNil(SerialFromJson);
+  FreeAndNil(SerialToJson);
+  Context.Free; // record
+  inherited;
 end;
 
 class function TSuperRttiContext.GetFieldName(r: TRttiField): string;
@@ -9281,6 +9317,7 @@ var
   v: TValue;
   ctxowned: Boolean;
 begin
+  inherited;
   if ctx = nil then
   begin
     ctx := TSuperRttiContext.Create;
