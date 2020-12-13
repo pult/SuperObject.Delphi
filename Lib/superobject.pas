@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1020.1320
+{ superobject.pas } // version: 2020.1213.1945
 (*
  *                         Super Object Toolkit
  *
@@ -6709,7 +6709,9 @@ begin
   if (index < FLength) then
   begin
     if FLength = FSize then
-      Expand(FLength);
+      {+}
+      Expand(FLength+1); // https://github.com/hgourvest/superobject/pull/16
+      {+.}
     if Index < FLength then
       Move(FArray^[index], FArray^[index + 1],
         (FLength - index) * SizeOf(Pointer));
