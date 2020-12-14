@@ -1,4 +1,4 @@
-{ superdate.pas } // version: 2020.1214.0410
+{ superdate.pas } // version: 2020.1214.2217
 unit superdate;
 
 interface
@@ -9,6 +9,7 @@ interface
   {$mode delphi}
   //{$mode delphiunicode} { optional }
   {$h+} // long AnsiString (not ShortString)
+  //--{$Q-} // overflow error - off
 {$ENDIF}
 
 {$B-}
@@ -80,14 +81,14 @@ interface
 uses
   supertypes
 {+}
+  ,SysUtils
+  ,DateUtils
   {$IFDEF SUPERTIMEZONE}
   ,supertimezone
   {$ELSE !SUPERTIMEZONE}
-  ,SysUtils
     {$IFDEF MSWINDOWS}
   ,Windows
     {$ELSE !MSWINDOWS}
-  ,DateUtils
       {$IFDEF UNIX} // FPC, Kylix
         {$IFDEF KYLIX}
   ,Libc//, ckLibc // ckLibc - from CrossKylix
@@ -120,11 +121,17 @@ function JavaToDelphiDateTime(const dt: int64): TDateTime;
 function DelphiToJavaDateTime(const dt: TDateTime): int64;
 //--function JavaDateTimeToISO8601Date(const dt: Int64; const TimeZone: SOString = ''): SOString;
 //function DelphiDateTimeToISO8601Date(dt: TDateTime): String;
-function ISO8601DateToJavaDateTime(const str: String; var ms: Int64): Boolean;
+function ISO8601DateToJavaDateTime(const str: SOString; var ms: Int64): Boolean;
 //function ISO8601DateToDelphiDateTime(const str: String; var dt: TDateTime): Boolean;
 
 {$ENDIF !SUPERTIMEZONE}
 {+.}
+
+function DelphiDateToISO8601(const ADate: TDateTime; AInputIsUTC: Boolean = true): SOString;
+function TryISO8601ToDelphiDate(const AISODate: SOString; out Value: TDateTime; AReturnUTC: Boolean = True): Boolean;
+
+function DelphiDateTimeToUnix(const AValue: TDateTime; AInputIsUTC: Boolean = True): Int64;
+function UnixToDelphiDateTime(const AValue: Int64; AReturnUTC: Boolean): TDateTime;
 
 implementation
 
@@ -572,7 +579,7 @@ end;
 {$ENDIF !USE_POSIX}
 
 {$ifdef fpc}{$hints off}{$endif}
-function ISO8601DateToJavaDateTime(const str: String; var ms: Int64): Boolean;
+function ISO8601DateToJavaDateTime(const str: SOString; var ms: Int64): Boolean;
 type
   TState = (
     stStart, stYear, stMonth, stWeek, stWeekDay, stDay, stDayOfYear,
@@ -595,7 +602,7 @@ type
   end;
 
 var
-  p: PChar;
+  p: PSOChar;
   state: TState;
   pos, v: Word;
   sep: TPerhaps;
@@ -603,7 +610,7 @@ var
   st: TDateTimeInfo;
   DayTable: PDayTable;
 
-  function get(var v: Word; c: Char): Boolean; {$IFDEF HAVE_INLINE}inline;{$ENDIF}
+  function get(var v: Word; c: SOChar): Boolean; {$IFDEF HAVE_INLINE}inline;{$ENDIF}
   begin
     if (SOIChar(c) < 256) and {+}
       {$IFDEF NEXTGEN}
@@ -622,7 +629,7 @@ var
 label
   error;
 begin
-  p := PChar(str);
+  p := PSOChar(str);
   sep := perhaps;
   state := stStart;
   pos := 0;
@@ -1196,8 +1203,8 @@ begin
       if not (st.month in [1..12]) or (DayTable^[st.month] < st.day) then
         goto error;
 
-      for v := 1 to  st.month - 1 do
-        Inc(ms, DayTable^[v] * 86400000);
+      for v := 1 to st.month - 1 do
+        Inc(ms, Int64(DayTable^[v]) * Int64(86400000)); // FPC: Fix Overflow Error (EIntOverflowError: Arithmertic overflow)
     end;
     dec(st.year);
     ms := ms + (int64((st.year * 365) + (st.year div 4) - (st.year div 100) +
@@ -1242,4 +1249,122 @@ end;
 
 {$ENDIF !SUPERTIMEZONE}
 {+.}
+
+{$if not declared(DateToISO8601)}
+function DateToISO8601(const ADate: TDateTime; AInputIsUTC: Boolean = true): string;
+const
+  SDateFormat: string = '%.4d-%.2d-%.2dT%.2d:%.2d:%.2d.%.3dZ'; { Do not localize }
+  SOffsetFormat: string = '%s%s%.02d:%.02d'; { Do not localize }
+  Neg: array[Boolean] of string = ('+', '-'); { Do not localize }
+var
+  y, mo, d, h, mi, se, ms: Word;
+  Bias: Integer;
+  TimeZone: TTimeZone;
+begin
+  DecodeDate(ADate, y, mo, d);
+  DecodeTime(ADate, h, mi, se, ms);
+  Result := Format(SDateFormat, [y, mo, d, h, mi, se, ms]);
+  if not AInputIsUTC then
+  begin
+    TimeZone := TTimeZone.Local;
+    {$hints off} // Hint: H2443 Inline function 'TTimeZone.GetUtcOffset' has not been expanded because unit 'System.TimeSpan' is not specified in USES list
+    Bias := Trunc(TimeZone.GetUTCOffset(ADate).Negate.TotalMinutes);
+    if Bias <> 0 then
+    begin
+      // Remove the Z, in order to add the UTC_Offset to the string.
+      SetLength(Result, Result.Length - 1);
+      Result := Format(SOffsetFormat, [Result, Neg[Bias > 0], Abs(Bias) div MinsPerHour,
+        Abs(Bias) mod MinsPerHour]);
+    end
+  end;
+end;
+{$hints on}
+{$ifend}
+
+function DelphiDateToISO8601(const ADate: TDateTime; AInputIsUTC: Boolean = true): SOString;
+begin
+  Result := SOString(DateToISO8601(ADate, AInputIsUTC));
+end;
+
+{$UNDEF USE_ISO8601ToDate} { not change }
+{$if declared(TryISO8601ToDate)}
+  {-$DEFINE USE_ISO8601ToDate} // optional: DateItils.pas: TryISO8601ToDate. !! Slowly through the use of try-except !!
+{$ifend}
+
+function TryISO8601ToDelphiDate(const AISODate: SOString; out Value: TDateTime; AReturnUTC: Boolean = True): Boolean;
+{$IFNDEF USE_ISO8601ToDate}
+var
+  jdt: Int64;
+  {$IFDEF SUPERTIMEZONE}
+  LTimeZone: TSuperTimeZone;
+  {$ENDIF}
+{$ENDIF USE_ISO8601ToDate}
+begin
+  {$IFDEF USE_ISO8601ToDate}
+  Result := TryISO8601ToDate(AISODate, Value, AReturnUTC);
+  {$ELSE !USE_ISO8601ToDate}
+    {$IFDEF SUPERTIMEZONE}
+    LTimeZone := TSuperTimeZone.Zone[ TSuperTimeZone.GetCurrentTimeZone ];
+    Result := LTimeZone.ISO8601ToJava(AISODate, jdt);
+    if Result then begin
+      Value := LTimeZone.JavaToDelphi(jdt);
+      if AReturnUTC then
+        Value := LTimeZone.LocalToUTC(Value);
+    end;
+    {$ELSE}
+    Result := ISO8601DateToJavaDateTime(AISODate, {%H-}jdt);
+    if Result then begin
+      Value := JavaToDelphiDateTime(jdt);
+      if AReturnUTC then begin
+        {$if declared(TTimeZone)}
+        Value := TTimeZone.Local.ToUniversalTime(Value);
+        {$else}
+        Value := LocalTimeToUniversal(Value);
+        {$ifend}
+      end;
+    end;
+    {$ENDIF}
+  {$ENDIF !USE_ISO8601ToDate}
+end;
+
+function DelphiDateTimeToUnix(const AValue: TDateTime; AInputIsUTC: Boolean = True): Int64;
+{$if defined(FPC) or (CompilerVersion >= 30.00)}{$else}
+var
+  LDate : TDateTime;
+{$ifend}
+begin
+  {$if defined(FPC) or (CompilerVersion >= 30.00)}
+  Result := DateTimeToUnix(AValue, AInputIsUTC);
+  {$else}
+  if AInputIsUTC then
+    LDate := AValue
+  else
+    {$if declared(TTimeZone)}
+    LDate := TTimeZone.Local.ToUniversalTime(AValue);
+    {$else}
+    LDate := LocalTimeToUniversal(AValue);
+    {$ifend}
+  Result := SecondsBetween(UnixDateDelta, LDate);
+  if LDate < UnixDateDelta then
+     Result := -Result;
+  {$ifend}
+end;
+
+function UnixToDelphiDateTime(const AValue: Int64; AReturnUTC: Boolean): TDateTime;
+begin
+  {$if defined(FPC) or (CompilerVersion >= 30.00)}
+  Result := UnixToDateTime(AValue, AReturnUTC);
+  {$else}
+  if AReturnUTC then
+    Result := IncSecond(UnixDateDelta, AValue)
+  else begin
+    {$if declared(TTimeZone)}
+    Result := TTimeZone.Local.ToLocalTime(IncSecond(UnixDateDelta, AValue));
+    {$else}
+    Result := UniversalTimeToLocal(AValue);
+    {$ifend}
+  end;
+  {$ifend}
+end;
+
 end.
