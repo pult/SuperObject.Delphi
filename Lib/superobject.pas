@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1214.0835
+{ superobject.pas } // version: 2020.1214.2217
 (*
  *                         Super Object Toolkit
  *
@@ -83,6 +83,7 @@ unit superobject;
 {$ifdef FPC}
   {$notes on}
   //{$POINTERMATH ON}
+  {$warn 6058 off} // -vm6058 Note: * inlie not inlined
 {$endif}
 
 {$T+} // Typed Pointer
@@ -121,6 +122,8 @@ unit superobject;
   {$IFDEF UNICODE} // for "{$mode delphiunicode}"
     {$define FPC_UNICODE}
   {$ENDIF}
+  {$define HAVE_RTTI} // optional
+{$define NEED_FORMATSETTINGS} // optional
   //?{$POINTERMATH OFF}
   //{$define HAVE_FOR_IN}
 {$ELSE}
@@ -223,12 +226,17 @@ uses
   {+.}
   Classes, supertypes
 {$IFDEF HAVE_RTTI}
+  {$IFDEF FPC}
+  ,Generics.Collections, Generics.Defaults
+  {$ELSE !FPC}
   {$IF CompilerVersion >= 23} // XE2 Up
   ,System.Generics.Collections
   {$ELSE}
   ,Generics.Collections       // Only XE
   {$IFEND}
-  ,RTTI, TypInfo
+  {$ENDIF !FPC}
+  ,{%H-}Rtti // FPC: Warning: Unit "Rtti" is experimental
+  ,TypInfo
 {$ENDIF}
   ;
 
@@ -331,7 +339,7 @@ type
     FCount: Integer;
     function balance(bal: TSuperAvlEntry): TSuperAvlEntry;
   protected
-    procedure doDeleteEntry(Entry: TSuperAvlEntry; all: boolean); virtual;
+    procedure doDeleteEntry(Entry: TSuperAvlEntry; {%H-}all: boolean); virtual;
     function CompareNodeNode(node1, node2: TSuperAvlEntry): integer; virtual;
     function CompareKeyNode(const k: SOString; h: TSuperAvlEntry): integer; virtual;
     function Insert(h: TSuperAvlEntry): TSuperAvlEntry; virtual;
@@ -624,7 +632,7 @@ type
   private
     FSize: Integer;
   public
-    function Append(buf: PSOChar; Size: Integer): Integer; override;
+    function Append({%H-}buf: PSOChar; Size: Integer): Integer; override;
     function Append(buf: PSOChar): Integer; override;
     procedure Reset; override;
     constructor Create; reintroduce; virtual;
@@ -1100,6 +1108,7 @@ type
 
 {$IFDEF HAVE_RTTI}
   TSuperRttiContext = class;
+  TSuperRttiContextClass = class of TSuperRttiContext;
 
   TSerialFromJson = function(ctx: TSuperRttiContext; const obj: ISuperObject; var Value: TValue): Boolean;
   TSerialToJson = function(ctx: TSuperRttiContext; var value: TValue; const index: ISuperObject): ISuperObject;
@@ -1140,11 +1149,12 @@ type
   SOArray = TArrayAttribute;
 //SOType = class(TSuperAttribute);
 
+  TSuperDateTimeZoneHandling = (sdzLOCAL, sdzUTC);
+  TSuperDateFormatHandling = (sdfJava, sdfISO, sdfUnix, sdfFormatSettings);
+
   TSuperRttiContext = class
   private
-    {+} // https://code.google.com/p/superobject/issues/detail?id=64
-    FForceSerializer: Boolean;
-    {+.}
+    FForceSerializer: Boolean; // https://code.google.com/p/superobject/issues/detail?id=64
     // https://github.com/hgourvest/superobject/pull/13/
     class function IsArrayExportable(const aMember: TRttiMember): Boolean;
     class function IsExportable(const aType: TRttiType; const Element: TClassElement): Boolean;
@@ -1169,10 +1179,13 @@ type
     PropertiesVisibility: set of TMemberVisibility;
     {$ENDIF}
     {+.}
+    SuperDateTimeZoneHandling: TSuperDateTimeZoneHandling;
+    SuperDateFormatHandling: TSuperDateFormatHandling;
+
     constructor Create; virtual;
     destructor Destroy; override;
     function FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
-    function ToJson(var value: TValue; const index: ISuperObject): ISuperObject; virtual;
+    function ToJson(var value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function AsType<T>(const obj: ISuperObject): T;
     function AsJson<T>(const obj: T; const index: ISuperObject = nil): ISuperObject;
     {+}
@@ -1206,10 +1219,15 @@ const
   cst_ce_field = 1;
   cst_ce_property = 2;
 
-function ObjectIsError(obj: TSuperObject): boolean;
-function ObjectIsType(const obj: ISuperObject; typ: TSuperType): boolean;
-function ObjectGetType(const obj: ISuperObject): TSuperType;
-function ObjectIsNull(const obj: ISuperObject): Boolean;
+{$IFDEF HAVE_RTTI}
+var
+  SuperRttiContextClassDefault: TSuperRttiContextClass = TSuperRttiContext;
+  SuperRttiContextDefault: TSuperRttiContext;
+{$ENDIF HAVE_RTTI}
+function ObjectIsError(obj: TSuperObject): boolean; {$IFDEF HAVE_INLINE}inline;{$ENDIF}
+function ObjectIsType(const obj: ISuperObject; typ: TSuperType): boolean; {$IFDEF HAVE_INLINE}inline;{$ENDIF}
+function ObjectGetType(const obj: ISuperObject): TSuperType; {$IFNDEF FPC}{$IFDEF HAVE_INLINE}inline;{$ENDIF}{$ENDIF}
+function ObjectIsNull(const obj: ISuperObject): Boolean; {$IFDEF HAVE_INLINE}inline;{$ENDIF}
 
 function ObjectFindFirst(const obj: ISuperObject; var F: TSuperObjectIter): boolean;
 function ObjectFindNext(var F: TSuperObjectIter): boolean;
@@ -1248,7 +1266,7 @@ function SOInvoke(const obj: TValue; const method: string; const params: string;
 
 {+} // https://code.google.com/p/superobject/issues/detail?id=39
 function IsGenericType(TypeInfo: PTypeInfo): Boolean;
-function GetDeclaredGenericType(RttiContext: TRttiContext; TypeInfo: PTypeInfo): TRttiType;
+function GetDeclaredGenericType({%H-}RttiContext: TRttiContext; {%H-}TypeInfo: PTypeInfo): TRttiType;
 function IsList(RttiContext: TRttiContext; TypeInfo: PTypeInfo): Boolean;
 {+.}
 {$ENDIF}
@@ -1282,7 +1300,10 @@ var
 implementation
 uses
   {+}
-  superdate
+  {$IFDEF FPC}
+  strutils, // +PosEx
+  {$ENDIF}
+  DateUtils, superdate
   {+.}
   {+},variants{+.} // https://code.google.com/p/superobject/issues/detail?id=62
   {+}
@@ -1489,9 +1510,10 @@ end;
 //
 function MakeSOBytes(buf: PSOChar; Size: Integer): TBytes; {$IFDEF HAVE_INLINE}inline;{$ENDIF}
 begin
+  {%H-}Result := nil;
   if (Size > 0) {and Assigned(buf)} then begin
-    SetLength(Result, Size*SizeOf(WideChar));
-    Move(buf^, PWideCHar(Result)^, Length(Result));
+    SetLength({%H-}Result, Size*SizeOf(WideChar));
+    Move(buf^, PWideChar(Result)^, Length(Result));
   end;
 end;
 //
@@ -1716,7 +1738,7 @@ function SA(const Args: array of const): ISuperObject; overload;
 //  PByteArray = ^TByteArray;
 var
   j: Integer;
-  intf: IInterface;
+  intf: ISuperObject;
 begin
   Result := TSuperObject.Create(stArray);
   for j := 0 to length(Args) - 1 do
@@ -1741,8 +1763,7 @@ begin
         if TVarRec(Args[j]).VInterface = nil then
           Add(nil) else
           if IInterface(TVarRec(Args[j]).VInterface).QueryInterface(ISuperObject, intf) = 0 then
-            //Add(ISuperObject(intf)) else
-            Add(TSuperObject(intf)) else // https://github.com/hgourvest/superobject/pull/39 // TODO: test it
+            Add(intf) else
             Add(nil);
       vtPointer :
         if TVarRec(Args[j]).VPointer = nil then
@@ -1779,7 +1800,7 @@ var // https://github.com/hgourvest/superobject/pull/39
 begin
   Result := TSuperObject.Create(stArray);
   for i := 0 to High(AStrings) do
-    Result.AsArray.Add(TSuperObject.Create(AStrings[i]));
+    Result.AsArray.Add(TSuperObject.Create(SOString(AStrings[i])));
 end;
 
 {+}
@@ -2284,31 +2305,73 @@ end;
 
 {$IFDEF HAVE_RTTI}
 
-function serialtoboolean(ctx: TSuperRttiContext; var value: TValue; const index: ISuperObject): ISuperObject;
+function SerialToBoolean({%H-}ctx: TSuperRttiContext; var value: TValue; const {%H-}index: ISuperObject): ISuperObject;
 begin
   Result := TSuperObject.Create(TValueData(value).FAsSLong <> 0);
 end;
 
-function serialtodatetime(ctx: TSuperRttiContext; var value: TValue; const index: ISuperObject): ISuperObject;
+function SerialToDateTime(ctx: TSuperRttiContext; var value: TValue; const {%H-}index: ISuperObject): ISuperObject;
+var
+  ctxowned: Boolean;
+  LValue: Double;
 begin
-  Result := TSuperObject.Create(DelphiToJavaDateTime(TValueData(value).FAsDouble));
+  Result := nil;
+  if Value.IsEmpty then
+    Exit;
+  LValue := TValueData(value).FAsDouble;
+
+  ctxowned := False;
+  if ctx = nil then begin
+    ctx := SuperRttiContextDefault;
+    if ctx = nil then begin
+      if SuperRttiContextClassDefault = nil then
+        ctx := TSuperRttiContext.Create
+      else
+        ctx := SuperRttiContextClassDefault.Create;
+      ctxowned := True;
+    end;
+  end;
+  try
+    case ctx.SuperDateFormatHandling of
+      //sdfJava:
+      //  Result := TSuperObject.Create( DelphiToJavaDateTime(LValue) );
+      sdfISO:
+        Result := TSuperObject.Create( DelphiDateToISO8601(LValue, ctx.SuperDateTimeZoneHandling = sdzUTC) );
+      sdfUnix:
+        Result := TSuperObject.Create( DelphiDateTimeToUnix(LValue, ctx.SuperDateTimeZoneHandling = sdzUTC) );
+      sdfFormatSettings:
+        if ctx.SuperDateTimeZoneHandling = sdzLOCAL then
+          {$if declared(TTimeZone)}
+          Result := TSuperObject.Create( DateTimeToStr(TTimeZone.Local.ToLocalTime(LValue), SOFormatSettings) )
+          {$else}
+          Result := TSuperObject.Create( SOString(DateTimeToStr(LocalTimeToUniversal(LValue), SOFormatSettings)) )
+          {$ifend}
+        else
+          Result := TSuperObject.Create( SOString(DateTimeToStr(LValue, SOFormatSettings)) );
+      else // sdfJava
+        Result := TSuperObject.Create( DelphiToJavaDateTime(LValue) );
+    end; // case
+  finally
+    if ctxowned then
+      ctx.Free;
+  end;
 end;
 
-function serialtoguid(ctx: TSuperRttiContext; var value: TValue; const index: ISuperObject): ISuperObject;
+function SerialToGuid({%H-}ctx: TSuperRttiContext; var value: TValue; const {%H-}index: ISuperObject): ISuperObject;
 var
   g: TGUID;
 begin
   value.ExtractRawData(@g);
   Result := TSuperObject.Create(
-    format('%.8x-%.4x-%.4x-%.2x%.2x-%.2x%.2x%.2x%.2x%.2x%.2x',
+    SOString(Format('%.8x-%.4x-%.4x-%.2x%.2x-%.2x%.2x%.2x%.2x%.2x%.2x',
               [g.D1, g.D2, g.D3,
                g.D4[0], g.D4[1], g.D4[2],
                g.D4[3], g.D4[4], g.D4[5],
                g.D4[6], g.D4[7]])
-  );
+  ));
 end;
 
-function serialfromboolean(ctx: TSuperRttiContext; const obj: ISuperObject; var Value: TValue): Boolean;
+function SerialFromBoolean(ctx: TSuperRttiContext; const obj: ISuperObject; var Value: TValue): Boolean;
 var
   o: ISuperObject;
   S: string;
@@ -2332,36 +2395,39 @@ begin
     end;
   stString:
     begin
+      Result := False;
       o := SO(obj.AsString);
       if not ObjectIsType(o, stString) then
-        Result := serialfromboolean(ctx, SO(obj.AsString), Value) else
+        Result := SerialFromBoolean(ctx, SO(obj.AsString), Value) else
       begin // https://github.com/hgourvest/superobject/pull/46
-        S := obj.AsString;
-        if (S = '1') or (S = '-1') or SameText(S, 'True') then
-        begin
-          TValueData(Value).FAsSLong := Ord(True);
-          Result := True;
-        end
-        else if (S = '0') or SameText(S, 'False') then
-        begin
-          TValueData(Value).FAsSLong := Ord(False);
-          Result := True;
-        end else
-          Result := False;
+        S := string(obj.AsString);
+        if (S <> '') then begin
+          if (S = '1') or (S = '-1') or SameText(S, 'True') then
+          begin
+            TValueData(Value).FAsSLong := Ord(True);
+            Result := True;
+          end
+          else if (S = '0') or SameText(S, 'False') then
+          begin
+            TValueData(Value).FAsSLong := Ord(False);
+            Result := True;
+          end;
+        end;
       end;
     end;
   else
     Result := False;
-  end;
+  end; // case
 end;
 
-function serialfromdatetime(ctx: TSuperRttiContext; const obj: ISuperObject; var Value: TValue): Boolean;
+function SerialFromDateTime({%H-}ctx: TSuperRttiContext; const obj: ISuperObject; var Value: TValue): Boolean;
 var
   dt: TDateTime;
-  i: Int64;
-  {+}s:String;{+.}
+  jdt: Int64;
+  s: string;
 begin
-  case ObjectGetType(obj) of
+  Result := False;
+  {%H-}case ObjectGetType(obj) of
   stInt:
     begin
       TValueData(Value).FAsDouble := JavaToDelphiDateTime(obj.AsInteger);
@@ -2371,37 +2437,28 @@ begin
     begin
       {+} // https://code.google.com/p/superobject/issues/detail?id=37
           // supports: "\/Date(939772800000)\/"
-      s := obj.AsString;
-      if Length(s)>length('/Date()') then
-        if (pos('/Date(',S)=1) and (S[Length(S)]='/') then
+      s := string(obj.AsString);
+      if (Length(s) > Length('/Date()')) then begin
+        if (Copy(s,1,Length('/Date()'))='/Date(') and (S[Length(S)]='/') then
         begin
-          Delete(S,Length(S)-1,2);
-          Delete(S,1,6);
-          Result := TryStrToInt64(S,I);
+          Delete(s, Length(s)-1, 2);
+          Delete(s, 1, 6);
+          Result := TryStrToInt64(s, jdt);
           if Result then
-            TValueData(Value).FAsDouble := JavaToDelphiDateTime(I);
+            TValueData(Value).FAsDouble := JavaToDelphiDateTime(jdt);
           Exit;
         end;
+      end;
       {+.}
-
-      if ISO8601DateToJavaDateTime({+}s{+.}, i) then
-      begin
-        TValueData(Value).FAsDouble := JavaToDelphiDateTime(i);
-        Result := True;
-      end else
-      if TryStrToDateTime({+}s{+.}, dt) then
-      begin
+      Result := TryISO8601ToDelphiDate(SOString(s), dt)
+        or TryStrToDateTime(s, dt);
+      if Result then
         TValueData(Value).FAsDouble := dt;
-        Result := True;
-      end else
-        Result := False;
     end;
-  else
-    Result := False;
   end;
 end;
 
-function serialfromguid(ctx: TSuperRttiContext; const obj: ISuperObject; var Value: TValue): Boolean;
+function SerialFromGuid({%H-}ctx: TSuperRttiContext; const obj: ISuperObject; var Value: TValue): Boolean;
 begin
   case ObjectGetType(obj) of
     stNull:
@@ -2416,27 +2473,15 @@ begin
 end;
 
 function SOInvoke(const obj: TValue; const method: string; const params: ISuperObject; ctx: TSuperRttiContext): ISuperObject; overload;
-var
-  owned: Boolean;
 begin
-  if ctx = nil then
-  begin
-    ctx := TSuperRttiContext.Create;
-    owned := True;
-  end else
-    owned := False;
-  try
-    if TrySOInvoke(ctx, obj, method, params, Result) <> irSuccess then
-      raise ESuperObject.Create('Invalid method call');
-  finally
-    if owned then
-      ctx.Free;
-  end;
+  Result := nil;
+  if TrySOInvoke(ctx, obj, method, params, Result) <> irSuccess then
+    raise ESuperObject.Create('Invalid method call');
 end;
 
 function SOInvoke(const obj: TValue; const method: string; const params: string; ctx: TSuperRttiContext): ISuperObject; overload;
 begin
-  Result := SOInvoke(obj, method, so(params), ctx)
+  Result := SOInvoke(obj, method, so(SOString(params)), ctx)
 end;
 
 function TrySOInvoke(var ctx: TSuperRttiContext; const obj: TValue;
@@ -2468,7 +2513,7 @@ var
         for i := 0 to Length(ps) - 1 do
           if (pfOut in ps[i].Flags) then
             TValue.Make(nil, ps[i].ParamType.Handle, a[i]) else
-            if not ctx.FromJson(ps[i].ParamType.Handle, params.AsObject[ps[i].Name], a[i]) then
+            if not ctx.FromJson(ps[i].ParamType.Handle, params.AsObject[SOString(ps[i].Name)], a[i]) then
             begin
               Result := False;
               Exit;
@@ -2487,7 +2532,7 @@ var
   var
     i: Integer;
   begin
-    case ObjectGetType(params) of
+    {%H-}case ObjectGetType(params) of
       stArray:
         for i := 0 to Length(ps) - 1 do
           if (ps[i].Flags * [pfVar, pfOut]) <> [] then
@@ -2495,75 +2540,94 @@ var
       stObject:
         for i := 0 to Length(ps) - 1 do
           if (ps[i].Flags * [pfVar, pfOut]) <> [] then
-            params.AsObject[ps[i].Name] := ctx.ToJson(a[i], index);
+            params.AsObject[SOString(ps[i].Name)] := ctx.ToJson(a[i], index);
     end;
   end;
 
+var
+  ctxowned: Boolean;
 begin
   Result := irSuccess;
   index := SO;
-  case obj.Kind of
-    tkClass:
-      begin
-        t := TRttiInstanceType(ctx.Context.GetType(obj.AsObject.ClassType));
-        m := t.GetMethod(method);
-        if m = nil then
-        begin
-          Result := irMethothodError;
-          Exit;
-        end;
-        ps := m.GetParameters;
-        SetLength(a, Length(ps));
-        if not GetParams then
-        begin
-          Result := irParamError;
-          Exit;
-        end;
-        if m.IsClassMethod then
-        begin
-          v := m.Invoke(obj.AsObject.ClassType, a);
-          Return := ctx.ToJson(v, index);
-          SetParams;
-        end else
-        begin
-          v := m.Invoke(obj, a);
-          Return := ctx.ToJson(v, index);
-          SetParams;
-        end;
-      end;
-    tkClassRef:
-      begin
-        t := TRttiInstanceType(ctx.Context.GetType(obj.AsClass));
-        m := t.GetMethod(method);
-        if m = nil then
-        begin
-          Result := irMethothodError;
-          Exit;
-        end;
-        ps := m.GetParameters;
-        SetLength(a, Length(ps));
 
-        if not GetParams then
-        begin
-          Result := irParamError;
-          Exit;
-        end;
-        if m.IsClassMethod then
-        begin
-          v := m.Invoke(obj, a);
-          Return := ctx.ToJson(v, index);
-          SetParams;
-        end else
-        begin
-          Result := irError;
-          Exit;
-        end;
-      end;
-  else
-    begin
-      Result := irError;
-      Exit;
+  ctxowned := False;
+  if ctx = nil then begin
+    ctx := SuperRttiContextDefault;
+    if ctx = nil then begin
+      if SuperRttiContextClassDefault = nil then
+        ctx := TSuperRttiContext.Create
+      else
+        ctx := SuperRttiContextClassDefault.Create;
+      ctxowned := True;
     end;
+  end;
+  try
+    case obj.Kind of
+      tkClass:
+        begin
+          t := TRttiInstanceType(ctx.Context.GetType(obj.AsObject.ClassType));
+          m := t.GetMethod(method);
+          if m = nil then
+          begin
+            Result := irMethothodError;
+            Exit;
+          end;
+          ps := m.GetParameters;
+          SetLength({%H-}a, Length(ps));
+          if not GetParams then
+          begin
+            Result := irParamError;
+            Exit;
+          end;
+          if m.IsClassMethod then
+          begin
+            v := m.Invoke(obj.AsObject.ClassType, a);
+            Return := ctx.ToJson(v, index);
+            SetParams;
+          end else
+          begin
+            v := m.Invoke(obj, a);
+            Return := ctx.ToJson(v, index);
+            SetParams;
+          end;
+        end;
+      tkClassRef:
+        begin
+          t := TRttiInstanceType(ctx.Context.GetType(obj.AsClass));
+          m := t.GetMethod(method);
+          if m = nil then
+          begin
+            Result := irMethothodError;
+            Exit;
+          end;
+          ps := m.GetParameters;
+          SetLength(a, Length(ps));
+
+          if not GetParams then
+          begin
+            Result := irParamError;
+            Exit;
+          end;
+          if m.IsClassMethod then
+          begin
+            v := m.Invoke(obj, a);
+            Return := ctx.ToJson(v, index);
+            SetParams;
+          end else
+          begin
+            Result := irError;
+            Exit;
+          end;
+        end;
+    else
+      begin
+        Result := irError;
+        Exit;
+      end;
+    end;
+  finally
+    if ctxowned then
+      ctx.Free;
   end;
 end;
 
@@ -2586,17 +2650,22 @@ begin
 end;
 //
 function GetDeclaredGenericType(RttiContext: TRttiContext; TypeInfo: PTypeInfo): TRttiType;
+{$IFNDEF FPC}
 var
   startPos,
   endPos: Integer;
-  vTypeName: String;
+  vTypeName: string;
+{$ENDIF !FPC}
 begin
   Result := nil;
+  {$IFDEF FPC} // TODO: FPC currently not supported
+    Exit;
+  {$ELSE !FPC}
   {+}
   {$IFDEF NEXTGEN}
   vTypeName := TypeInfo.NameFld.ToString;
   {$ELSE}
-  vTypeName := String(TypeInfo.Name);
+  vTypeName := string(TypeInfo.Name);
   {$ENDIF}
   startPos := AnsiPos('<', vTypeName);
   if startPos > 0 then
@@ -2605,10 +2674,11 @@ begin
     if endPos > 0 then
     begin
       vTypeName := Copy(vTypeName, startPos + 1, endPos - Succ(startPos));
-      Result := RttiContext.FindType(vTypeName);
+      Result := RttiContext.FindType(vTypeName); // TODO: FPC currently not supported
     end;
   end;
   {+.}
+  {$ENDIF !FPC}
 end;
 //
 function IsList(RttiContext: TRttiContext; TypeInfo: PTypeInfo): Boolean;
@@ -2774,7 +2844,7 @@ begin
 {$IFDEF DEBUG}{$IFDEF MSWINDOWS}
   InterlockedDecrement(debugcount);
 {$ENDIF}{$ENDIF}
-  case FDataType of
+  {%H-}case FDataType of
     stObject:
       {+}
       if Assigned(FO.c_object) then
@@ -3338,12 +3408,12 @@ type
     {$IF (not defined(FPC)) and (CompilerVersion<=21)} // Less then XE
     class function GetBufferEncoding(const Buffer: TBytes; var AEncoding: TEncoding; ADefaultEncoding: TEncoding): Integer; overload; static;
     {$IFEND}
-    function GetChars(Bytes: PByte; ByteCount: Integer; Chars: PUnicodeChar; CharCount: Integer): Integer; overload; inline;
-    function GetBytes(Chars: PUnicodeChar; CharCount: Integer; Bytes: PByte; ByteCount: Integer): Integer; overload; inline;
-    function GetByteCount(Chars: PUnicodeChar; CharCount: Integer): Integer; overload; inline;
+    function GetChars(Bytes: PByte; ByteCount: Integer; Chars: PUnicodeChar; CharCount: Integer): Integer; overload; {$IFNDEF FPC}{$IFDEF HAVE_INLINE}inline;{$ENDIF}{$ENDIF}
+    function GetBytes(Chars: PUnicodeChar; CharCount: Integer; Bytes: PByte; ByteCount: Integer): Integer; overload; {$IFNDEF FPC}{$IFDEF HAVE_INLINE}inline;{$ENDIF}{$ENDIF}
+    function GetByteCount(Chars: PUnicodeChar; CharCount: Integer): Integer; overload; {$IFNDEF FPC}{$IFDEF HAVE_INLINE}inline;{$ENDIF}{$ENDIF}
     //
     class function GetEncoding(CodePage: Integer; var encnew: boolean): TEncoding; overload; {static;} // "-static" - because need access the "inherited GetEncoding". Otherwise need change name "GetEncoding".
-    class function GetEncoding(CodePage: Integer): TEncoding; overload; {static;} inline; // "-static" - because need access the "inherited GetEncoding". Otherwise need change name "GetEncoding".
+    class function GetEncoding(CodePage: Integer): TEncoding; overload; {static;} {$IFNDEF FPC}{$IFDEF HAVE_INLINE}inline;{$ENDIF}{$ENDIF} // "-static" - because need access the "inherited GetEncoding". Otherwise need change name "GetEncoding".
   end;
 {$IF (not defined(FPC)) and (CompilerVersion<=21)} // Less then XE
 function TEncodingHelper.GetCodePage: Integer;
@@ -4037,7 +4107,7 @@ begin
 
 //dbg('.ParseStream: 1');
     pBufferDecoder := nil; // == cheUTF16BE
-    SetLength(bom, 4+1);   // + for debug: pwidechar(bom)
+    SetLength({%H-}bom, 4+1);   // + for debug: pwidechar(bom)
     p.enc := DetectStreamEncoding(stream, bom, p.size, bomLen, p.codepage{$IFDEF USE_TENCODING}, p.encnew{$ENDIF}, ACodePage);
     if p.size = 0 then // Stream is empty
       Exit;
@@ -4243,8 +4313,18 @@ class function TSuperObject.ParseEx(tok: TSuperTokenizer; str: PSOChar; len: int
 {$IFNDEF NEXTGEN}
 const
   spaces = [#32,#8,#9,#10,#12,#13];
-  delimiters = ['"', '.', '[', ']', '{', '}', '(', ')', ',', ':', #0];
+  {%H-}delimiters = ['"', '.', '[', ']', '{', '}', '(', ')', ',', ':', #0];
+  {$IFDEF FPC}
+  //reserved = delimiters + spaces; // FPC: Error: Illegal expression
+  reserved = [
+    // delimiters:
+    '"', '.', '[', ']', '{', '}', '(', ')', ',', ':', #0,
+    // spaces:
+    #32,#8,#9,#10,#12,#13
+  ];
+  {$ELSE !FPC}
   reserved = delimiters + spaces;
+  {$ENDIF !FPC}
   path = ['a'..'z', 'A'..'Z', '.', '_'];
   //
   super_number_chars_set = ['0'..'9','.','+','-','e','E'];
@@ -4438,14 +4518,15 @@ redo_char:
 
       '0'..'9':
         begin
-          if (tok.depth = 0) then
-            case ObjectGetType(athis) of
+          if (tok.depth = 0) then begin
+            {%H-}case ObjectGetType(athis) of
             stObject:
               begin
                 TokRec^.state := tsIdentifier;
                 TokRec^.current := athis;
                 goto redo_char;
               end;
+            end;
           end;
           TokRec^.state := tsNumber;
           tok.pb.Reset;
@@ -4766,7 +4847,7 @@ redo_char:
              TokRec^.parent := athis else
              TokRec^.parent := TokRec^.current;
 
-             case ObjectGetType(TokRec^.parent) of
+             {%H-}case ObjectGetType(TokRec^.parent) of
                stObject:
                  case v of
                    '.':
@@ -4907,7 +4988,7 @@ redo_char:
                      end;
                    end;
                  end;
-{$IFDEF SUPER_METHOD}
+               {$IFDEF SUPER_METHOD}
                stMethod:
                  case v of
                    '.':
@@ -4949,8 +5030,8 @@ redo_char:
                      goto out;
                    end;
                  end;
-{$ENDIF}
-             end;
+               {$ENDIF SUPER_METHOD}
+             end; // case
           end else
             tok.pb.Append(@v, 1);
         end;
@@ -5497,7 +5578,7 @@ begin
     Exit;
   FProcessing := true;
   try
-    case FDataType of
+    {%H-}case FDataType of
       stBoolean: FO.c_boolean := false;
       stDouble: FO.c_double := 0.0;
       stCurrency: FO.c_currency := 0.0;
@@ -5505,9 +5586,9 @@ begin
       stObject: FO.c_object.Clear(all);
       stArray: FO.c_array.Clear(all);
       stString: FOString := '';
-{$IFDEF SUPER_METHOD}
+      {$IFDEF SUPER_METHOD}
       stMethod: FO.c_method := nil;
-{$ENDIF}
+      {$ENDIF}
     end;
   finally
     FProcessing := false;
@@ -5519,7 +5600,7 @@ begin
   if FProcessing then exit;
   FProcessing := true;
   try
-    case FDataType of
+    {%H-}case FDataType of
       stObject: FO.c_object.Pack(all);
       stArray: FO.c_array.Pack(all);
     end;
@@ -5553,6 +5634,7 @@ var
   arr: {+}ISuperArray;{+.}
   j: integer;
 begin
+  Result := nil;
   case FDataType of
     stBoolean: Result := TSuperObject.Create(FO.c_boolean);
     stDouble: Result := TSuperObject.Create(FO.c_double);
@@ -5588,9 +5670,7 @@ begin
       end;
     stNull:
       Result := TSuperObject.Create(stNull);
-  else
-    Result := nil;
-  end;
+  end; // case
 end;
 
 procedure TSuperObject.Merge(const obj: ISuperObject; reference: boolean);
@@ -5601,7 +5681,7 @@ var
   j: integer;
 begin
   if ObjectIsType(obj, FDataType) then
-  case FDataType of
+  {%H-}case FDataType of
     stBoolean: FO.c_boolean := obj.AsBoolean;
     stDouble: FO.c_double := obj.AsDouble;
     stCurrency: FO.c_currency := obj.AsCurrency;
@@ -5717,7 +5797,7 @@ begin
   if obj <> nil then
   begin
     case obj.DataType of
-      stNull:     Result := Null;
+    //stNull:     Result := Null;
       stBoolean:  Result := obj.AsBoolean;
       stDouble:   Result := obj.AsDouble;
       stCurrency: Result := obj.AsCurrency;
@@ -5729,7 +5809,7 @@ begin
       stMethod:   Result := obj;
       {$ENDIF}
       else
-        Result := Null; // ?Unassigned
+        Result := Null;
     end;
   end
   else
@@ -5999,7 +6079,7 @@ var
     if ObjectIsType(obj, stString) then
       names[obj.AsString] := o;
 
-    case FindDataType(o) of
+    {%H-}case FindDataType(o) of
       dtMap:
         begin
           obj := o['mapping'];
@@ -7134,7 +7214,7 @@ begin
     if Size <= BUFFER_SIZE then
       Pointer(pBuffer) := @Buffer
     else begin
-      SetLength(aBuffer, Size);
+      SetLength({%H-}aBuffer, Size);
       Pointer(pBuffer) := @(Pointer(aBuffer)^); // == @aBuffer[{$IFDEF UNICODE}0{$ELSE}1{$ENDIF}]
     end;
     for i := 0 to Size - 1 do
@@ -7226,7 +7306,7 @@ begin
     //Pointer(pBuffer) := @(Pointer(aBuffer)^); // == @aBuffer[0]
     //
     // optimized:
-    SetLength(aBuffer, i);
+    SetLength({%H-}aBuffer, i);
     Pointer(pBuffer) := @(Pointer(aBuffer)^); // == @aBuffer[0]
     size := TEncoding.UTF8.GetBytes(buf, size, PByte(pBuffer), i);
   end;
@@ -7322,7 +7402,7 @@ begin // TODO: test
         //Pointer(pBuffer) := @(Pointer(aBuffer)^); // == @aBuffer[0]
         //
         // optimized:
-        SetLength(aBuffer, i);
+        SetLength({%H-}aBuffer, i);
         Pointer(pBuffer) := @(Pointer(aBuffer)^); // == @aBuffer[0]
         size := TEncoding.UTF8.GetBytes(buf, size, PByte(pBuffer), i);
       end;
@@ -8429,7 +8509,11 @@ end;
 //
 function TRttiObjectHelper.GetCustomAttributes: TArray<TCustomAttribute>;
 begin
-  Result := GetCustomAttributes<TCustomAttribute>;
+  {$IFDEF FPC}
+  Result := TArray<TCustomAttribute>(GetCustomAttributes(TCustomAttribute));
+  {$ELSE}
+  Result := GetCustomAttributes<TCustomAttribute>; // FPC: Error: Illegal expression
+  {$ENDIF}
 end;
 //
 function TRttiObjectHelper.GetCustomAttributes<T>: TArray<T>;
@@ -8441,7 +8525,8 @@ function TRttiObjectHelper.GetCustomAttributes(attributeType: TClass; MaxCount: 
 var
   A: TCustomAttribute;
 begin
-  SetLength(Result, 0);
+  {%H-}Result := nil;
+  SetLength({%H-}Result, 0);
   for A in GetAttributes do begin
     if A.InheritsFrom(attributeType) then begin
       SetLength(Result, Length(Result) + 1);
@@ -8451,7 +8536,7 @@ begin
     end;
   end;
 end;
-{$ENDIF}
+{$ENDIF USE_REFLECTION}
 {+.}
 
 { TClassAttribute }
@@ -8485,14 +8570,17 @@ begin
   SerialFromJson := TDictionary<PTypeInfo, TSerialFromJson>.Create;
   SerialToJson := TDictionary<PTypeInfo, TSerialToJson>.Create;
 
-  SerialFromJson.Add(TypeInfo(Boolean), serialfromboolean);
-  SerialToJson.Add(TypeInfo(Boolean), serialtoboolean);
+  SuperDateTimeZoneHandling := sdzUTC;
+  SuperDateFormatHandling := sdfISO; // OLD: sdfJava
 
-  SerialFromJson.Add(TypeInfo(TDateTime), serialfromdatetime);
-  SerialToJson.Add(TypeInfo(TDateTime), serialtodatetime);
+  SerialFromJson.Add(TypeInfo(Boolean), SerialFromBoolean);
+  SerialToJson.Add(TypeInfo(Boolean), SerialToBoolean);
 
-  SerialFromJson.Add(TypeInfo(TGUID), serialfromguid);
-  SerialToJson.Add(TypeInfo(TGUID), serialtoguid);
+  SerialFromJson.Add(TypeInfo(TDateTime), SerialFromDateTime);
+  SerialToJson.Add(TypeInfo(TDateTime), SerialToDateTime);
+
+  SerialFromJson.Add(TypeInfo(TGUID), SerialFromGuid);
+  SerialToJson.Add(TypeInfo(TGUID), SerialToGuid);
 
   {+} // https://code.google.com/p/superobject/issues/detail?id=16
   {$IFDEF USE_REFLECTION}
@@ -8504,6 +8592,8 @@ end;
 
 destructor TSuperRttiContext.Destroy;
 begin
+  if Self = SuperRttiContextDefault then
+    SuperRttiContextDefault := nil;
   FreeAndNil(SerialFromJson);
   FreeAndNil(SerialToJson);
   Context.Free; // record
@@ -8585,7 +8675,7 @@ begin
   end;
   for A in r.GetAttributes do begin
     if A.InheritsFrom(SODefault) then begin
-      Result := SO(SODefault(A).Name);
+      Result := SO(SOString(SODefault(A).Name));
       Exit;
     end;
   end;
@@ -8599,8 +8689,13 @@ begin
   {+} // https://code.google.com/p/superobject/issues/detail?id=53
   ret:= TValue.Empty;
   {+.}
-  if FromJson(TypeInfo(T), obj, ret) then
-    Result := ret.AsType<T> else
+  if FromJson(TypeInfo(T), obj, ret) then begin
+    {$IFDEF FPC}
+    ret.ExtractRawData(@Result);
+    {$ELSE}
+    Result := ret.AsType<T>;
+    {$ENDIF}
+  end else
   {+} // https://code.google.com/p/superobject/issues/detail?id=53
   begin
     if ret.Kind = tkClass then
@@ -8643,7 +8738,11 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
   begin
     if ObjectIsType(obj, stString) and (Length(obj.AsString) = 1) then
     begin
+      {$IFDEF FPC}
+      Value := TValue.From<SOChar>( PSOChar(obj.AsString)^ );
+      {$ELSE}
       Value := obj.AsString[1];
+      {$ENDIF}
       Result := True;
     end else
       Result := False;
@@ -8662,7 +8761,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
       end;
     stString:
       begin
-        if TryStrToInt64(obj.AsString, i) then
+        if TryStrToInt64(string(obj.AsString), i) then
         begin
           TValue.Make(nil, TypeInfo, Value);
           TValueData(Value).FAsSInt64 := i;
@@ -8717,7 +8816,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
       end;
     stString:
       begin
-        if TryStrToInt(obj.AsString, i) then
+        if TryStrToInt(string(obj.AsString), i) then
         begin
           TValue.Make(nil, TypeInfo, Value);
           TValueData(Value).FAsSLong := i;
@@ -8769,15 +8868,22 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
         Value := '';
         Result := True;
       end;
-    else
-      Value := obj.AsString;
-      Result := True;
-    end;
+    else begin
+        {$IFDEF FPC}
+        Value := TValue.From<SOString>(SOString(obj.AsString));
+        {$ELSE}
+        Value := obj.AsString;
+        {$ENDIF}
+        Result := True;
+      end;
+    end; // case
   end;
 
   procedure FromClass();
   var
-    f: TRttiField;
+    {$IFNDEF FPC}
+    f: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
+    {$ENDIF}
     v: TValue;
     {+} // https://code.google.com/p/superobject/issues/detail?id=39
     vArray: {+}ISuperArray{+.};
@@ -8796,6 +8902,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
           Result := True;
           if Value.Kind <> tkClass then
             Value := GetTypeData(TypeInfo).ClassType.Create;
+          {$IFNDEF FPC} // FPC: Currently not supported rtti for Fields
           {+} // https://code.google.com/p/superobject/issues/detail?id=16
           {$IFDEF USE_REFLECTION}
           if FieldsVisibility <> [] then
@@ -8819,6 +8926,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
                 Exit;
             end;
           // for.
+          {$ENDIF !FPC}
           {+} // https://code.google.com/p/superobject/issues/detail?id=16
           {$IFDEF USE_REFLECTION}
           if PropertiesVisibility <> [] then
@@ -8827,7 +8935,8 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
             and (p.GetCustomAttribute<SOIgnore> = nil) then
             begin
               v := TValue.Empty;
-              Result := FromJson(p.PropertyType.Handle, GetPropertyDefault(p, obj.AsObject[GetPropertyName(p)]), v);
+              Result := FromJson(p.PropertyType.Handle,
+                GetPropertyDefault(p, obj.AsObject[SOString(GetPropertyName(p))]), v);
               if Result then
                 p.SetValue(Value.AsObject, v)
               else if ForceSerializer then
@@ -8880,9 +8989,10 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
     end;
   end;
 
+  {$IFNDEF FPC} // FPC: Currently not supported rtti for Fields
   procedure FromRecord();
   var
-    f: TRttiField;
+    f: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
     p: Pointer;
     v: TValue;
     fieldObj: ISuperObject;
@@ -8893,11 +9003,11 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
     begin
       if ObjectIsType(obj, stObject) and (f.FieldType <> nil) then
       begin
-{$IFDEF VER210}
+        {$IFDEF VER210}
         p := IValueData(TValueData(Value).FHeapData).GetReferenceToRawData;
-{$ELSE}
+        {$ELSE}
         p := TValueData(Value).FValueData.GetReferenceToRawData;
-{$ENDIF}
+        {$ENDIF}
         {+} // https://code.google.com/p/superobject/issues/detail?id=40
         {
         Result := FromJson(f.FieldType.Handle, GetObjectDefault(f, obj.AsObject[GetObjectName(f)]), v);
@@ -8929,6 +9039,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
       end;
     end;
   end;
+  {$ENDIF !FPC}
 
   procedure FromDynArray();
   var
@@ -8949,27 +9060,42 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
         DynArraySetLength(p, TypeInfo, 1, @i);
         pb := p;
         typ := GetTypeData(TypeInfo);
+        {$IFDEF FPC}
+        if typ.elTypeRef <> nil then
+          el := typ.elTypeRef^ else
+          el := typ.elType2Ref^;
+        {$ELSE !FPC}
         if typ.elType <> nil then
           el := typ.elType^ else
           el := typ.elType2^;
+        {$ENDIF !FPC}
 
         Result := True;
         for i := 0 to i - 1 do
         begin
-          Result := FromJson(el, obj.AsArray[i], val);
+          Result := FromJson(el, obj.AsArray[i], {%H-}val);
           if not Result then
             Break;
           val.ExtractRawData(pb);
           val := TValue.Empty;
           Inc(pb, typ.elSize);
         end;
-        if Result then
-          TValue.MakeWithoutCopy(@p, TypeInfo, Value) else
+        if Result then begin
+          {$IFDEF FPC}
+          TValue.Make(@p, TypeInfo, Value);
+          {$ELSE}
+          TValue.MakeWithoutCopy(@p, TypeInfo, Value);
+          {$ENDIF}
+        end else
           DynArrayClear(p, TypeInfo);
       end;
     stNull:
       begin
+        {$IFDEF FPC}
+        TValue.Make(nil, TypeInfo, Value);
+        {$ELSE}
         TValue.MakeWithoutCopy(nil, TypeInfo, Value);
+        {$ENDIF}
         Result := True;
       end;
     else
@@ -8978,66 +9104,101 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
       DynArraySetLength(p, TypeInfo, 1, @i);
       pb := p;
       typ := GetTypeData(TypeInfo);
+      {$IFDEF FPC}
+      if typ.elTypeRef <> nil then
+        el := typ.elTypeRef^ else
+        el := typ.elType2Ref^;
+      {$ELSE !FPC}
       if typ.elType <> nil then
         el := typ.elType^ else
         el := typ.elType2^;
+      {$ENDIF !FPC}
 
       Result := FromJson(el, obj, val);
       val.ExtractRawData(pb);
       val := TValue.Empty;
 
-      if Result then
-        TValue.MakeWithoutCopy(@p, TypeInfo, Value) else
+      if Result then begin
+        {$IFDEF FPC}
+        TValue.Make(@p, TypeInfo, Value);
+        {$ELSE !FPC}
+        TValue.MakeWithoutCopy(@p, TypeInfo, Value);
+        {$ENDIF !FPC}
+      end else
         DynArrayClear(p, TypeInfo);
     end;
   end;
 
-  procedure FromArray();
+  procedure FromArray(); // TODO: FPC: Check
   var
-    ArrayData: PArrayTypeData;
+    ArrayData: {$IFDEF FPC}^TArrayTypeData{$ELSE}PArrayTypeData{$ENDIF};
     idx: Integer;
     function ProcessDim(dim: Byte; const o: ISuperobject): Boolean;
     var
       i: Integer;
       v: TValue;
-      a: PTypeData;
+      dt: PTypeData;
+      //a: {$IFDEF FPC}^TArrayTypeData{$ELSE}PTypeData{$ENDIF};
     begin
       if ObjectIsType(o, stArray) and (ArrayData.Dims[dim-1] <> nil) then
       begin
-        {$IFDEF FPC}
-        a := @GetTypeData(ArrayData.Dims[dim-1]^).ArrayData;
-        {$ELSE}
-        {$IF CompilerVersion >= 34.00}
-        a := PTypeData( // TODO: check
-             @GetTypeData(ArrayData.Dims[dim-1]^).ArrayData
-        );
-        {$ELSE}
-        a := @GetTypeData(ArrayData.Dims[dim-1]^).ArrayData;
-        {$IFEND}
-        {$ENDIF}
-
-        if (a.MaxValue - a.MinValue + 1) <> o.AsArray.Length then
+        dt := GetTypeData(ArrayData.Dims[dim-1]{$IFNDEF FPC}^{$ENDIF});
+//      {$IFDEF FPC}
+//      //a := @GetTypeData(ArrayData.Dims[dim-1]).ArrayData;
+//      a := @dt.ArrayData;
+//      {$ELSE !FPC}
+//      {$IF CompilerVersion >= 34.00} // TODO: check
+//      //a := PTypeData(
+//      //     @GetTypeData(ArrayData.Dims[dim-1]^).ArrayData
+//      //);
+//      a := PTypeData(@dt.ArrayData);
+//      {$ELSE}
+//      //a := @GetTypeData(ArrayData.Dims[dim-1]^).ArrayData;
+//      a := @dt.ArrayData;
+//      {$IFEND}
+//      {$ENDIF !FPC}
+//      {$IFDEF FPC}
+//      //-if (a.Size <> o.AsArray.Length) then
+//      if (dt.MaxValue - dt.MinValue + 1) <> o.AsArray.Length then
+//      {$ELSE}
+//      if (a.MaxValue - a.MinValue + 1) <> o.AsArray.Length then
+//      {$ENDIF}
+        if (dt.MaxValue - dt.MinValue + 1) <> o.AsArray.Length then
         begin
           Result := False;
           Exit;
         end;
         Result := True;
-        if dim = ArrayData.DimCount then
-          for i := a.MinValue to a.MaxValue do
+        if (dim = ArrayData.DimCount) then begin
+//        {$IFDEF FPC}
+//        //-for i := 0 to a.Size-1 do
+//        for i := dt.MinValue to dt.MaxValue do
+//        {$ELSE !FPC}
+//        for i := a.MinValue to a.MaxValue do
+//        {$ENDIF !FPC}
+          for i := dt.MinValue to dt.MaxValue do
           begin
-            Result := FromJson(ArrayData.ElType^, o.AsArray[i], v);
+            Result := FromJson(ArrayData.ElType{$IFNDEF FPC}^{$ENDIF}, o.AsArray[i], {%H-}v);
             if not Result then
               Exit;
             Value.SetArrayElement(idx, v);
             inc(idx);
           end
-        else
-          for i := a.MinValue to a.MaxValue do
+        end
+        else begin
+//        {$IFDEF FPC}
+//        //-for i := 0 to a.Size-1 do
+//        for i := dt.MinValue to dt.MaxValue do
+//        {$ELSE !FPC}
+//        for i := a.MinValue to a.MaxValue do
+//        {$ENDIF !FPC}
+          for i := dt.MinValue to dt.MaxValue do
           begin
             Result := ProcessDim(dim + 1, o.AsArray[i]);
             if not Result then
               Exit;
           end;
+        end;
       end else
         Result := False;
     end;
@@ -9055,7 +9216,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
         Result := True;
         for i := 0 to ArrayData.ElCount - 1 do
         begin
-          Result := FromJson(ArrayData.ElType^, obj.AsArray[i], v);
+          Result := FromJson(ArrayData.ElType{$IFNDEF FPC}^{$ENDIF}, obj.AsArray[i], {%H-}v);
           if not Result then
             Exit;
           Value.SetArrayElement(idx, v);
@@ -9068,6 +9229,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
       Result := ProcessDim(1, obj);
   end;
 
+  {$IFNDEF FPC} // FPC rtti Currently not supported FindType
   procedure FromClassRef();
   var
     r: TRttiType;
@@ -9084,6 +9246,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
     end else
       Result := False;
   end;
+  {$ENDIF !FPC}
 
   procedure FromUnknown();
   begin
@@ -9110,7 +9273,11 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
         end;
       stString:
         begin
+          {$IFDEF FPC}
+          Value := TValue.From<SOString>( obj.AsString );
+          {$ELSE !FPC}
           Value := obj.AsString;
+          {$ENDIF !FPC}
           Result := True;
         end
     else
@@ -9124,13 +9291,13 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
   var
     o: ISuperObject;
     {+}
-    {$IF CompilerVersion >= 33.00}  // DX 10.3 Rio Up
+    {$IF defined(FPC) or (CompilerVersion >= 33.00)}  // DX 10.3 Rio Up
     AGuid: TGUID;
     {$IFEND}
     {+.}
   begin
     {+}
-    {$IF CompilerVersion >= 33.00}  // DX 10.3 Rio Up
+    {$IF defined(FPC) or (CompilerVersion >= 33.00)}  // DX 10.3 Rio Up
     AGuid := GetTypeData(TypeInfo).Guid;
     if CompareMem(@AGuid, @soGUID, SizeOf(TGUID)) then
     {$ELSE}
@@ -9164,12 +9331,20 @@ begin
         tkClass: FromClass();
         tkMethod: ;
         tkWChar: FromWideChar();
-        tkRecord: FromRecord();
+        tkRecord:
+          {$IFNDEF FPC} // FPC: Currently not supported rtti for Fields
+          FromRecord()
+          {$ENDIF}
+          ;
         tkPointer: ;
         tkInterface: FromInterface();
         tkArray: FromArray();
         tkDynArray: FromDynArray();
-        tkClassRef: FromClassRef();
+        tkClassRef:
+          {$IFNDEF FPC} // FPC rtti Currently not supported FindType
+          FromClassRef()
+          {$ENDIF}
+          ;
       else
         FromUnknown()
       end else
@@ -9181,7 +9356,7 @@ begin
       end;
   end else
     Result := False;
-end;
+end; // function TSuperRttiContext.FromJson
 
 {+} // https://code.google.com/p/superobject/issues/detail?id=16
 {$IFDEF USE_REFLECTION}
@@ -9192,7 +9367,7 @@ begin
   if not ObjectIsType(obj, stNull) then Exit(obj);
   for o in r.GetAttributes do
     if o is SODefault then
-      Exit(SO(SODefault(o).Name));
+      Exit(SO(SOString(SODefault(o).Name)));
   Result := obj;
 end;
 //
@@ -9248,7 +9423,16 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
 
   procedure ToChar;
   begin
+    {$IFDEF FPC}
+      {$if SizeOf(SOChar) = 1}
+      Result := TSuperObject.Create(SOString(AnsiString(Value.AsAnsiChar)));
+      {$else}
+      Result := TSuperObject.Create(SOString(UnicodeString(Value.AsWideChar)));
+      {$ifend}
+    {$ELSE !FPC}
+    //?Result := TSuperObject.Create(SOString(Value.AsType<SOChar>));
     Result := TSuperObject.Create(string(Value.AsType<{+}{$IFDEF NEXTGEN}Char{$ELSE}AnsiChar{$ENDIF}{+.}>));
+    {$ENDIF !FPC}
   end;
 
   procedure ToInteger;
@@ -9269,14 +9453,24 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
 
   procedure ToString;
   begin
+    {$IFDEF FPC}
+    {$if SizeOf(SOChar) = 1}
+    Result := TSuperObject.Create(Value.AsAnsiString);
+    {$else}
+    Result := TSuperObject.Create(Value.AsUnicodeString);
+    {$ifend}
+    {$ELSE !FPC}
     Result := TSuperObject.Create(string(Value.AsType<string>));
+    {$ENDIF !FPC}
   end;
 
   procedure ToClass;
   var
     o: ISuperObject;
     t: TRttiType;
-    f: TRttiField;
+    {$IFNDEF FPC}
+    f: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
+    {$ENDIF !FPC}
     {+} // https://code.google.com/p/superobject/issues/detail?id=16
     {$IFDEF USE_REFLECTION}
     p: TRttiProperty;
@@ -9286,16 +9480,17 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
   begin
     if TValueData(Value).FAsObject <> nil then
     begin
-      o := index[IntToStr(NativeInt(Value.AsObject))];
+      o := index[SOString(IntToStr(NativeInt(Value.AsObject)))];
       if o = nil then
       begin
         Result := TSuperObject.Create(stObject);
-        index[IntToStr(NativeInt(Value.AsObject))] := Result;
+        index[SOString(IntToStr(NativeInt(Value.AsObject)))] := Result;
         t := nil;
         //
         // FIELDS:
         //
         {+} // https://code.google.com/p/superobject/issues/detail?id=16
+        {$IFNDEF FPC} // FPC rtti currently not supported TRttiType.GetFields
         {$IFDEF USE_REFLECTION}
         if (FieldsVisibility <> []) then
         {$ENDIF}
@@ -9327,6 +9522,7 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
             end; // for
           end; // if IsExportable
         end; // if FieldsVisibility
+        {$ENDIF !FPC}
         {+}
         //
         // PROPERTIES:
@@ -9346,9 +9542,9 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
               then begin
                 v := p.GetValue(Value.AsObject);
                 if IsArrayExportable(p) then
-                  Result.AsObject[getObjectName(p)] := Array2Class(v, index)
+                  Result.AsObject[SOString(getObjectName(p))] := Array2Class(v, index)
                 else
-                  Result.AsObject[getObjectName(p)] := ToJson(v, index);
+                  Result.AsObject[SOString(getObjectName(p))] := ToJson(v, index);
               end
             end; // for
           end; // if IsExportable
@@ -9363,17 +9559,32 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
 
   procedure ToWChar;
   begin
+    {$IFDEF FPC}
+    Result :=  TSuperObject.Create(Value.AsWideChar);
+    {$ELSE !FPC}
     Result :=  TSuperObject.Create(string(Value.AsType<WideChar>));
+    {$ENDIF !FPC}
   end;
 
   procedure ToVariant;
+  {$IFDEF FPC}
+  var vd: TVarData;
+  {$ENDIF FPC}
   begin
+    {$IFDEF FPC} // TODO: FPC Check
+    if Value.DataSize = SizeOf(TVarData) then begin
+      Value.ExtractRawData(@vd);
+      Result := SO(Variant(vd));
+    end;
+    {$ELSE !FPC}
     Result := SO(Value.AsVariant);
+    {$ENDIF !FPC}
   end;
 
+  {$IFNDEF FPC} // FPC rtti currently not supported TRttiType.GetFields
   procedure ToRecord;
   var
-    f: TRttiField;
+    f: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
     v: TValue;
   begin
     Result := TSuperObject.Create(stObject);
@@ -9393,11 +9604,12 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
       end;
     end;
   end;
+  {$ENDIF !FPC}
 
   procedure ToArray;
   var
     idx: Integer;
-    ArrayData: PArrayTypeData;
+    ArrayData: {$IFDEF FPC}^TArrayTypeData{$ELSE}PArrayTypeData{$ENDIF !FPC};
 
     procedure ProcessDim(dim: Byte; const o: ISuperObject);
     var
@@ -9406,8 +9618,9 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
       o2: ISuperObject;
       v: TValue;
     begin
-      if ArrayData.Dims[dim-1] = nil then Exit;
-      dt := GetTypeData(ArrayData.Dims[dim-1]^);
+      if ArrayData.Dims[dim-1] = nil then
+        Exit;
+      dt := GetTypeData(ArrayData.Dims[dim-1]{$IFNDEF FPC}^{$ENDIF});
       if Dim = ArrayData.DimCount then
         for i := dt.MinValue to dt.MaxValue do
         begin
@@ -9456,7 +9669,7 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
   procedure ToClassRef;
   begin
     if TValueData(Value).FAsClass <> nil then
-      Result :=  TSuperObject.Create(string(
+      Result :=  TSuperObject.Create(SOString(
         TValueData(Value).FAsClass.UnitName + '.' +
         TValueData(Value).FAsClass.ClassName)) else
       Result := nil;
@@ -9497,7 +9710,11 @@ begin
       tkClass: ToClass();
       tkWChar: ToWChar();
       tkVariant: ToVariant();
-      tkRecord: ToRecord();
+      tkRecord:
+        {$IFNDEF FPC} // FPC rtti currently not supported TRttiType.GetFields
+        ToRecord()
+        {$ENDIF !FPC}
+        ;
       tkArray: ToArray();
       tkDynArray: ToDynArray();
       tkClassRef: ToClassRef();
@@ -9506,22 +9723,28 @@ begin
       Result := nil;
     end else
       Result := Serial(Self, value, index);
-end;
+end; // function TSuperRttiContext.ToJson
 
 { TSuperObjectHelper }
 
 constructor TSuperObjectHelper.FromJson(const obj: ISuperObject; ctx: TSuperRttiContext = nil);
 var
-  v: TValue;
   ctxowned: Boolean;
+  v: TValue;
 begin
-  inherited;
-  if ctx = nil then
-  begin
-    ctx := TSuperRttiContext.Create;
-    ctxowned := True;
-  end else
-    ctxowned := False;
+  inherited
+  ;
+  ctxowned := False;
+  if ctx = nil then begin
+    ctx := SuperRttiContextDefault;
+    if ctx = nil then begin
+      if SuperRttiContextClassDefault = nil then
+        ctx := TSuperRttiContext.Create
+      else
+        ctx := SuperRttiContextClassDefault.Create;
+      ctxowned := True;
+    end;
+  end;
   try
     v := Self;
     if not ctx.FromJson(v.TypeInfo, obj, v) then
@@ -9534,20 +9757,25 @@ end;
 
 constructor TSuperObjectHelper.FromJson(const str: string; ctx: TSuperRttiContext = nil);
 begin
-  FromJson(SO(str), ctx);
+  FromJson(SO(SOString(str)), ctx);
 end;
 
 function TSuperObjectHelper.ToJson(ctx: TSuperRttiContext = nil): ISuperObject;
 var
+  ctxowned: Boolean;
   v: TValue;
-  ctxowned: boolean;
 begin
-  if ctx = nil then
-  begin
-    ctx := TSuperRttiContext.Create;
-    ctxowned := True;
-  end else
-    ctxowned := False;
+  ctxowned := False;
+  if ctx = nil then begin
+    ctx := SuperRttiContextDefault;
+    if ctx = nil then begin
+      if SuperRttiContextClassDefault = nil then
+        ctx := TSuperRttiContext.Create
+      else
+        ctx := SuperRttiContextClassDefault.Create;
+      ctxowned := True;
+    end;
+  end;
   try
     v := Self;
     Result := ctx.ToJson(v, SO);
@@ -9568,9 +9796,23 @@ initialization
   {$ENDIF}
   {$IFDEF NEED_FORMATSETTINGS}
   SOFormatSettings.DecimalSeparator := '.';
+  //SOFormatSettings.ThousandSeparator := ',';
+  SOFormatSettings.DateSeparator := '-';
+  SOFormatSettings.TimeSeparator := ':';
+  SOFormatSettings.ShortDateFormat := 'yy-mm-dd';
+  SOFormatSettings.LongDateFormat := 'yyyy-mm-dd';
+  SOFormatSettings.ShortTimeFormat := 'hh:mm';
+  SOFormatSettings.LongTimeFormat := 'hh:mm:ss';
   {$ENDIF}
+  {$IFDEF HAVE_RTTI}
+  SuperRttiContextClassDefault := TSuperRttiContext;
+  SuperRttiContextDefault := SuperRttiContextClassDefault.Create;
+  {$ENDIF HAVE_RTTI}
   {+.}
 finalization
+  {$IFDEF HAVE_RTTI}
+  SuperRttiContextDefault.Free;
+  {$ENDIF HAVE_RTTI}
   {$IFDEF DEBUG}
   Assert(debugcount = 0, 'Memory leak');
   {$ENDIF}
