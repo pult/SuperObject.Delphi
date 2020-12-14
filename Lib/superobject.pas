@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1214.0815
+{ superobject.pas } // version: 2020.1214.0835
 (*
  *                         Super Object Toolkit
  *
@@ -9219,7 +9219,7 @@ begin
 
   t := Context.GetType(obj.ClassType);
   getEnumerator := t.GetMethod('GetEnumerator');
-  if(getEnumerator <> nil) then
+  if (getEnumerator <> nil) then
   begin
     Result := TSuperObject.Create(stArray);
 
@@ -9352,17 +9352,6 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
               end
             end; // for
           end; // if IsExportable
-          //?or:
-          {// https://github.com/hgourvest/superobject/pull/13
-          if IsExportable(t, ceProperty) then begin
-            for p in t.GetProperties do begin
-              if (not isIgnoredObject(p)) and (p.PropertyType <> nil) then
-              begin
-                v := p.GetValue(Value.AsObject);
-                Result.AsObject[getObjectName(p)] := ToJson(v, index);
-              end
-            end;
-          end;}
         end; // if PropertiesVisibility
         {$ENDIF USE_REFLECTION}
         {+.}
