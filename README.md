@@ -1,5 +1,5 @@
 ﻿# SuperObject.Delphi
-Delphi json parser library SuperObject.
+Pascal (Delphi, FPC) json parser library SuperObject.
 
 ### Changes
 
