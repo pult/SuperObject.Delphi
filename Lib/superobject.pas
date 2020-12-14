@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1213.2045
+{ superobject.pas } // version: 2020.1214.0551
 (*
  *                         Super Object Toolkit
  *
@@ -231,7 +231,7 @@ uses
   ;
 
 const
-  SuperObjectVersion = 20190224;
+  SuperObjectVersion = 20201214;
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
   {$EXTERNALSYM SuperObjectVerInfo}
@@ -243,7 +243,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 20150805}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 20201214}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -1109,11 +1109,12 @@ type
     constructor Create(const AName: string);
     property Name: string read FName;
   end;
+  TSuperIgnoreAttribute = class(TCustomAttribute);
 
   SOName = class(TSuperAttribute);
   SODefault = class(TSuperAttribute);
   {+} // https://code.google.com/p/superobject/issues/detail?id=16
-  SOIgnore = class(TCustomAttribute);
+  SOIgnore = TSuperIgnoreAttribute;
   {+.}
 
   TSuperRttiContext = class
@@ -1121,6 +1122,7 @@ type
     {+} // https://code.google.com/p/superobject/issues/detail?id=64
     FForceSerializer: Boolean;
     {+.}
+    //class function IsIgnoredField(r: TRttiField): Boolean;
     class function GetFieldName(r: TRttiField): string;
     class function GetFieldDefault(r: TRttiField; const obj: ISuperObject): ISuperObject;
     {+} // https://code.google.com/p/superobject/issues/detail?id=16
@@ -8380,7 +8382,7 @@ type
     function GetCustomAttribute<T: TCustomAttribute>: T;
     function GetCustomAttributes: TArray<TCustomAttribute>; overload;
     function GetCustomAttributes<T: TCustomAttribute>: TArray<T>; overload;
-    function GetCustomAttributes(attributeType: TClass): TArray<TCustomAttribute>; overload;
+    function GetCustomAttributes(attributeType: TClass; MaxCount: Integer = 0): TArray<TCustomAttribute>; overload;
   end;
 //
 { TRttiObjectHelper }
@@ -8388,8 +8390,9 @@ type
 function TRttiObjectHelper.GetCustomAttribute<T>: T;
 begin
   Result := Default(T);
-  for Result in GetCustomAttributes<T> do
-    Break;
+  //for Result in GetCustomAttributes<T> do
+  //  Break;
+  for Result in TArray<T>(GetCustomAttributes(TClass(T), {MaxCount:}1)) do ;
 end;
 //
 function TRttiObjectHelper.GetCustomAttributes: TArray<TCustomAttribute>;
@@ -8402,7 +8405,7 @@ begin
   Result := TArray<T>(GetCustomAttributes(TClass(T)));
 end;
 //
-function TRttiObjectHelper.GetCustomAttributes(attributeType: TClass): TArray<TCustomAttribute>;
+function TRttiObjectHelper.GetCustomAttributes(attributeType: TClass; MaxCount: Integer): TArray<TCustomAttribute>;
 var
   A: TCustomAttribute;
 begin
@@ -8411,6 +8414,8 @@ begin
     if A.InheritsFrom(attributeType) then begin
       SetLength(Result, Length(Result) + 1);
       Result[High(Result)] := A;
+      if (MaxCount > 0) and (Length(Result) >= MaxCount) then
+        Exit;
     end;
   end;
 end;
@@ -8447,6 +8452,21 @@ begin
   Context.Free; // record
   inherited;
 end;
+
+{class function TSuperRttiContext.IsIgnoredField(r: TRttiField): Boolean;
+var
+  A: TCustomAttribute;
+begin
+  for A in r.GetAttributes do
+  begin
+    if A.InheritsFrom(SOIgnore) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+  Result := False;
+end;}
 
 class function TSuperRttiContext.GetFieldName(r: TRttiField): string;
 var
@@ -8772,6 +8792,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
     f: TRttiField;
     p: Pointer;
     v: TValue;
+    fieldObj: ISuperObject;
   begin
     Result := True;
     TValue.Make(nil, TypeInfo, Value);
@@ -8795,8 +8816,18 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
           Exit;
         end;
         }
-        if FromJson(f.FieldType.Handle, GetFieldDefault(f, obj.AsObject[GetFieldName(f)]), v) then
+        fieldObj := obj.AsObject[GetFieldName(f)];
+        fieldObj := GetFieldDefault(f, fieldObj);
+        if FromJson(f.FieldType.Handle, fieldObj, v) then
           f.SetValue(p, v);
+        {?// https://github.com/hgourvest/superobject/pull/19/
+        fieldObj := obj.AsObject[GetFieldName(f)];
+        if Assigned(fieldObj) then // ATRLP: 20160708: optional (no value in JSON) fields are allowed
+        begin
+          if FromJson(f.FieldType.Handle, GetFieldDefault(f, fieldObj), v) then
+            f.SetValue(p, v);
+        end;}
+        fieldObj := nil;
         {+.}
       end else
       begin
@@ -9142,9 +9173,11 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
         for f in Context.GetType(Value.AsObject.ClassType).GetFields do
           {+} // https://code.google.com/p/superobject/issues/detail?id=16
           if (f.FieldType <> nil) {$IFDEF USE_REFLECTION} and (f.Visibility in FieldsVisibility)
-          and (f.GetCustomAttribute<SOIgnore> = nil) {$ENDIF} then
+          and (f.GetCustomAttribute<SOIgnore> = nil)
+          //-and (not IsIgnoredField(f)) // https://github.com/hgourvest/superobject/pull/13
+          {$ENDIF USE_REFLECTION}
           {+.}
-          begin
+          then begin
             v := f.GetValue(Value.AsObject);
             Result.AsObject[GetFieldName(f)] := ToJson(v, index);
           end;
@@ -9154,8 +9187,9 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
         begin
           for p in Context.GetType(Value.AsObject.ClassType).GetProperties do
             if (p.PropertyType <> nil) and (p.Visibility in PropertiesVisibility)
-            and (p.GetCustomAttribute<SOIgnore> = nil) then
-            begin
+              and (p.GetCustomAttribute<SOIgnore> = nil)
+             //-and (not IsIgnoredField(p))
+            then begin
               v := p.GetValue(Value.AsObject);
               Result.AsObject[GetPropertyName(p)] := ToJson(v, index);
             end
@@ -9187,12 +9221,16 @@ function TSuperRttiContext.ToJson(var value: TValue; const index: ISuperObject):
     Result := TSuperObject.Create(stObject);
     for f in Context.GetType(Value.TypeInfo).GetFields do
     begin
-{$IFDEF VER210}
-      v := f.GetValue(IValueData(TValueData(Value).FHeapData).GetReferenceToRawData);
-{$ELSE}
-      v := f.GetValue(TValueData(Value).FValueData.GetReferenceToRawData);
-{$ENDIF}
-      Result.AsObject[GetFieldName(f)] := ToJson(v, index);
+      if (f.GetCustomAttribute<SOIgnore> = nil) then
+      //-if (not IsIgnoredField(f)) then // https://github.com/hgourvest/superobject/pull/13
+      begin
+        {$IFDEF VER210}
+        v := f.GetValue(IValueData(TValueData(Value).FHeapData).GetReferenceToRawData);
+        {$ELSE}
+        v := f.GetValue(TValueData(Value).FValueData.GetReferenceToRawData);
+        {$ENDIF}
+        Result.AsObject[GetFieldName(f)] := ToJson(v, index);
+      end;
     end;
   end;
 
