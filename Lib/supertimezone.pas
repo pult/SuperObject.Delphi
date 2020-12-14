@@ -307,7 +307,7 @@ end;
 
 class destructor TSuperTimeZone.Finish;
 begin
-  FCache.Free;
+  FreeAndNil(FCache);
   DeleteCriticalSection(FCacheCS);
 end;
 
