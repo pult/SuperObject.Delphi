@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1215.2147
+{ superobject.pas } // version: 2020.1215.2317
 (*
  *                         Super Object Toolkit
  *
@@ -1154,6 +1154,8 @@ type
 
   TSuperRttiContext = class
   protected
+    FForceDefault: Boolean;
+    FForceEnumeration: Boolean;
     FForceSerializer: Boolean; // https://code.google.com/p/superobject/issues/detail?id=64
     // https://github.com/hgourvest/superobject/pull/13/
     class function IsArrayExportable(const aMember: TRttiMember): Boolean;
@@ -1175,6 +1177,7 @@ type
     function jToString(const Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToClass(const Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToWChar(const Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
+    function jToEnumeration(const Value: TValue; const index: ISuperObject = nil): ISuperObject;
     function jToVariant(const Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToRecord(const Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToArray(const Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
@@ -1200,6 +1203,8 @@ type
     function AsType<T>(const obj: ISuperObject): T;
     function AsJson<T>(const obj: T; const index: ISuperObject = nil): ISuperObject;
 
+    property ForceDefault: Boolean read FForceDefault write FForceDefault; // default True;
+    property ForceEnumeration: Boolean read FForceEnumeration write FForceEnumeration; // default True;
     property ForceSerializer: Boolean read FForceSerializer write FForceSerializer; // default False;
   end;
 
@@ -2316,8 +2321,14 @@ end;
 {$IFDEF HAVE_RTTI}
 
 function SerialToBoolean({%H-}ctx: TSuperRttiContext; var value: TValue; const {%H-}index: ISuperObject): ISuperObject;
+var
+  LValue: Boolean;
 begin
-  Result := TSuperObject.Create(TValueData(value).FAsSLong <> 0);
+  LValue := TValueData(value).FAsSLong <> 0;
+  if LValue or (ctx = nil) or ctx.FForceDefault then
+    Result := TSuperObject.Create(LValue)
+  else
+    Result := nil;
 end;
 
 function SerialToDateTime(ctx: TSuperRttiContext; var value: TValue; const {%H-}index: ISuperObject): ISuperObject;
@@ -2342,6 +2353,8 @@ begin
     end;
   end;
   try
+    if (not ctx.FForceDefault) and (LValue = {DT Default:}0) then
+      Exit;
     case ctx.SuperDateFormatHandling of
       //sdfJava:
       //  Result := TSuperObject.Create( DelphiToJavaDateTime(LValue) );
@@ -8576,12 +8589,17 @@ end;
 constructor TSuperRttiContext.Create;
 begin
   inherited;
-  Context := TRttiContext.Create;
-  SerialFromJson := TDictionary<PTypeInfo, TSerialFromJson>.Create;
-  SerialToJson := TDictionary<PTypeInfo, TSerialToJson>.Create;
+
+  FForceDefault := True;
+  FForceEnumeration := True; // OLD: False
+  FForceSerializer := False;
 
   SuperDateTimeZoneHandling := sdzUTC;
   SuperDateFormatHandling := sdfISO; // OLD: sdfJava
+
+  Context := TRttiContext.Create;
+  SerialFromJson := TDictionary<PTypeInfo, TSerialFromJson>.Create;
+  SerialToJson := TDictionary<PTypeInfo, TSerialToJson>.Create;
 
   SerialFromJson.Add(TypeInfo(Boolean), SerialFromBoolean);
   SerialToJson.Add(TypeInfo(Boolean), SerialToBoolean);
@@ -9426,52 +9444,100 @@ end;
 {+.}
 
 function TSuperRttiContext.jToInt64(const Value: TValue; const index: ISuperObject): ISuperObject;
+var
+  LValue: SuperInt;
 begin
-  Result := TSuperObject.Create(SuperInt(Value.AsInt64));
+  LValue := SuperInt(Value.AsInt64);
+  if FForceDefault or (LValue <> {Default:}0) then
+    Result := TSuperObject.Create(LValue)
+  else
+    Result := nil;
 end;
 
 function TSuperRttiContext.jToChar(const Value: TValue; const index: ISuperObject): ISuperObject;
+var
+  LValue: SOString;
 begin
   {$IFDEF FPC}
     {$if SizeOf(SOChar) = 1}
-    Result := TSuperObject.Create(SOString(AnsiString(Value.AsAnsiChar)));
+    LValue := SOString(AnsiString(Value.AsAnsiChar));
     {$else}
-    Result := TSuperObject.Create(SOString(UnicodeString(Value.AsWideChar)));
+    LValue := SOString(UnicodeString(Value.AsWideChar));
     {$ifend}
   {$ELSE !FPC}
-  //?Result := TSuperObject.Create(SOString(Value.AsType<SOChar>));
-  Result := TSuperObject.Create(string(Value.AsType<{+}{$IFDEF NEXTGEN}Char{$ELSE}AnsiChar{$ENDIF}{+.}>));
+    //?Value := SOString(Value.AsType<SOChar>);
+    {$IFDEF NEXTGEN}
+    LValue := SOString(string(Value.AsType<Char>));
+    {$ELSE}
+    LValue := SOString(AnsiString(Value.AsType<AnsiChar>));
+    {$ENDIF}
   {$ENDIF !FPC}
+  if FForceDefault or (LValue <> SOString(#0)) then
+    Result := TSuperObject.Create(LValue)
+  else
+    Result := nil;
 end;
 
 function TSuperRttiContext.jToInteger(const Value: TValue; const index: ISuperObject): ISuperObject;
+var
+  LValue: Longint;
 begin
-  Result := TSuperObject.Create(TValueData(Value).FAsSLong);
+  LValue := SuperInt(TValueData(Value).FAsSLong);
+  if FForceDefault or (LValue <> {Default:}0) then
+    Result := TSuperObject.Create(LValue)
+  else
+    Result := nil;
 end;
 
 function TSuperRttiContext.jToFloat(const Value: TValue; const index: ISuperObject): ISuperObject;
 begin
   Result := nil;
   {%H-}case Value.TypeData.FloatType of
-    ftSingle: Result := TSuperObject.Create(TValueData(Value).FAsSingle);
-    ftDouble: Result := TSuperObject.Create(TValueData(Value).FAsDouble);
-    ftExtended: Result := TSuperObject.Create(TValueData(Value).FAsExtended);
-    ftComp: Result := TSuperObject.Create(TValueData(Value).FAsSInt64);
-    ftCurr: Result := TSuperObject.CreateCurrency(TValueData(Value).FAsCurr);
-  end;
+    ftSingle:
+      begin
+        if FForceDefault or (TValueData(Value).FAsSingle <> {Default:}0) then
+          Result := TSuperObject.Create(TValueData(Value).FAsSingle);
+      end;
+    ftDouble:
+      begin
+        if FForceDefault or (TValueData(Value).FAsDouble <> {Default:}0) then
+          Result := TSuperObject.Create(TValueData(Value).FAsDouble);
+      end;
+    ftExtended:
+      begin
+        if FForceDefault or (TValueData(Value).FAsExtended <> {Default:}0) then
+          Result := TSuperObject.Create(TValueData(Value).FAsExtended);
+      end;
+    ftComp:
+      begin
+        if FForceDefault or (TValueData(Value).FAsSInt64 <> {Default:}0) then
+          Result := TSuperObject.Create(TValueData(Value).FAsSInt64);
+      end;
+    ftCurr:
+      begin
+        if FForceDefault or (TValueData(Value).FAsCurr <> {Default:}0) then
+          Result := TSuperObject.CreateCurrency(TValueData(Value).FAsCurr);
+      end;
+  end; // case
 end;
 
 function TSuperRttiContext.jToString(const Value: TValue; const index: ISuperObject): ISuperObject;
+var
+  LValue: SOString;
 begin
   {$IFDEF FPC}
   {$if SizeOf(SOChar) = 1}
-  Result := TSuperObject.Create(Value.AsAnsiString);
+  LValue = SOString(Value.AsAnsiString);
   {$else}
-  Result := TSuperObject.Create(Value.AsUnicodeString);
+  LValue := SOString(Value.AsUnicodeString);
   {$ifend}
   {$ELSE !FPC}
-  Result := TSuperObject.Create(string(Value.AsType<string>));
+  LValue := SOString(string(Value.AsType<string>));
   {$ENDIF !FPC}
+  if FForceDefault or (Length(LValue) > 0) then
+    Result := TSuperObject.Create(LValue)
+  else
+    Result := nil;
 end;
 
 function TSuperRttiContext.jToClass(const Value: TValue; const index: ISuperObject): ISuperObject;
@@ -9564,27 +9630,63 @@ begin
 end; // function TSuperRttiContext.jToClass
 
 function TSuperRttiContext.jToWChar(const Value: TValue; const index: ISuperObject): ISuperObject;
+var
+  LValue: SOString;
 begin
   {$IFDEF FPC}
-  Result :=  TSuperObject.Create(Value.AsWideChar);
+  LValue :=  SOString(UnicodeString(Value.AsWideChar));
   {$ELSE !FPC}
-  Result :=  TSuperObject.Create(string(Value.AsType<WideChar>));
+  LValue :=  SOString(UnicodeString(Value.AsType<WideChar>));
   {$ENDIF !FPC}
+  if FForceDefault or (LValue <> SOString(#0)) then
+    Result := TSuperObject.Create(LValue)
+  else
+    Result := nil;
+end;
+
+function TSuperRttiContext.jToEnumeration(const Value: TValue; const index: ISuperObject): ISuperObject;
+var
+  LValue, LEnum: string;
+  TypeData: PTypeData;
+begin
+  if (not FForceEnumeration) then begin
+    Result := TSuperObject.Create(TValueData(Value).FAsSLong); // == jToInteger(Value, index);
+    Exit;
+  end;
+  TypeData := Value.TypeInfo.TypeData;
+  LValue := GetEnumName(Value.TypeInfo,Value.AsOrdinal);
+  if (TypeData.MinValue = 0) and (TypeData.MaxValue = 1)
+    and ( SameText(LValue, 'True') or SameText(LValue, 'False') ) then
+  begin
+    if FForceDefault or SameText(LValue, 'True') then
+      Result := TSuperObject.Create(Boolean(Value.AsBoolean));
+  end else begin
+    LEnum := GetEnumName(Value.TypeInfo,TypeData.MinValue);
+    if FForceDefault or (LValue <> LEnum) then
+      Result := TSuperObject.Create(LValue);
+  end;
 end;
 
 function TSuperRttiContext.jToVariant(const Value: TValue; const index: ISuperObject): ISuperObject;
-{$IFDEF FPC}
-var vd: TVarData;
-{$ENDIF FPC}
+var
+  LValue: Variant;
+  {$IFDEF FPC}
+  vd: TVarData;
+  {$ENDIF FPC}
 begin
-  {$IFDEF FPC} // TODO: FPC Check
-  if Value.DataSize = SizeOf(TVarData) then begin
-    Value.ExtractRawData(@vd);
-    Result := SO(Variant(vd));
+  Result := nil;
+  if not Value.IsEmpty then begin
+    {$IFDEF FPC} // TODO: FPC Check
+    if Value.DataSize = SizeOf(TVarData) then begin
+      Value.ExtractRawData(@vd);
+      LValue := Variant(vd);
+    end;
+    {$ELSE !FPC}
+    LValue := Value.AsVariant;
+    {$ENDIF !FPC}
   end;
-  {$ELSE !FPC}
-  Result := SO(Value.AsVariant);
-  {$ENDIF !FPC}
+  if FForceDefault or (not ( VarIsEmpty(LValue) or VarIsNull(LValue) )) then
+    Result := SO(LValue);
 end;
 
 function TSuperRttiContext.jToRecord(const Value: TValue; const index: ISuperObject): ISuperObject;
@@ -9596,7 +9698,7 @@ var
 begin
   Result := TSuperObject.Create(stObject);
   {$IFDEF FPC} // FPC rtti currently not supported TRttiType.GetFields
-  //Result := nil;
+  //-Result := nil;
   {$ELSE}
   for f in Context.GetType(Value.TypeInfo).GetFields do
   begin
@@ -9631,36 +9733,40 @@ var
     if ArrayData.Dims[dim-1] = nil then
       Exit;
     dt := GetTypeData(ArrayData.Dims[dim-1]{$IFNDEF FPC}^{$ENDIF});
-    if Dim = ArrayData.DimCount then
-      for i := dt.MinValue to dt.MaxValue do
-      begin
+    if Dim = ArrayData.DimCount then begin
+      for i := dt.MinValue to dt.MaxValue do begin
         v := Value.GetArrayElement(idx);
         o.AsArray.Add(toJSon(v, index));
         inc(idx);
       end
-    else
-      for i := dt.MinValue to dt.MaxValue do
-      begin
+    end else begin
+      for i := dt.MinValue to dt.MaxValue do begin
         o2 := TSuperObject.Create(stArray);
         o.AsArray.Add(o2);
         ProcessDim(dim + 1, o2);
       end;
+    end;
   end;
 var
   i: Integer;
   v: TValue;
 begin
-  Result := TSuperObject.Create(stArray);
+  Result := nil;
   ArrayData := @Value.TypeData.ArrayData;
   idx := 0;
-  if ArrayData.DimCount = 1 then
-    for i := 0 to ArrayData.ElCount - 1 do
-    begin
-      v := Value.GetArrayElement(i);
-      Result.AsArray.Add(toJSon(v, index))
-    end
-  else
-    ProcessDim(1, Result);
+  if ArrayData.DimCount = 1 then begin
+    if FForceDefault or (ArrayData.ElCount > 0) then begin
+      Result := TSuperObject.Create(stArray);
+      for i := 0 to ArrayData.ElCount - 1 do
+      begin
+        v := Value.GetArrayElement(i);
+        Result.AsArray.Add(toJSon(v, index))
+      end;
+    end;
+  end else begin
+    Result := TSuperObject.Create(stArray);
+    ProcessDim(1, Result); // TODO: FForceDefault
+  end;
 end; // function TSuperRttiContext.jToArray
 
 function TSuperRttiContext.jToDynArray(const Value: TValue; const index: ISuperObject): ISuperObject;
@@ -9668,11 +9774,14 @@ var
   i: Integer;
   v: TValue;
 begin
-  Result := TSuperObject.Create(stArray);
-  for i := 0 to Value.GetArrayLength - 1 do
-  begin
-    v := Value.GetArrayElement(i);
-    Result.AsArray.Add(toJSon(v, index));
+  Result := nil;
+  i := Value.GetArrayLength;
+  if FForceDefault or (i > 0) then begin
+    Result := TSuperObject.Create(stArray);
+    for i := 0 to i - 1 do begin
+      v := Value.GetArrayElement(i);
+      Result.AsArray.Add(toJSon(v, index));
+    end;
   end;
 end;
 
@@ -9709,6 +9818,8 @@ var
   Serial: TSerialToJson;
 begin
   Result := nil;
+  if Value.IsEmpty and (not FForceDefault) then
+    Exit;
   if SerialToJson.TryGetValue(Value.TypeInfo, Serial) then begin
     Result := Serial(Self, Value, index);
     Exit;
@@ -9718,7 +9829,7 @@ begin
       Result := jToInt64(Value, index);
     tkChar:
       Result := jToChar(Value, index);
-    tkSet, tkInteger, tkEnumeration:
+    tkSet, tkInteger:
       Result := jToInteger(Value, index);
     tkFloat:
       Result := jToFloat(Value, index);
@@ -9728,6 +9839,8 @@ begin
       Result := jToClass(Value, index);
     tkWChar:
       Result := jToWChar(Value, index);
+    tkEnumeration:
+      Result := jToEnumeration(Value, index);
     tkVariant:
       Result := jToVariant(Value, index);
     tkRecord:
@@ -9750,8 +9863,7 @@ var
   ctxowned: Boolean;
   v: TValue;
 begin
-  inherited
-  ;
+  inherited;
   ctxowned := False;
   if ctx = nil then begin
     ctx := SuperRttiContextDefault;
