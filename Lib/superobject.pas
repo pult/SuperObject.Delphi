@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1214.2217
+{ superobject.pas } // version: 2020.1215.2057
 (*
  *                         Super Object Toolkit
  *
@@ -241,7 +241,7 @@ uses
   ;
 
 const
-  SuperObjectVersion = 20201214;
+  SuperObjectVersion = 20201215;
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
   {$EXTERNALSYM SuperObjectVerInfo}
@@ -253,7 +253,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 20201214}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 20201215}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -1153,7 +1153,7 @@ type
   TSuperDateFormatHandling = (sdfJava, sdfISO, sdfUnix, sdfFormatSettings);
 
   TSuperRttiContext = class
-  private
+  protected
     FForceSerializer: Boolean; // https://code.google.com/p/superobject/issues/detail?id=64
     // https://github.com/hgourvest/superobject/pull/13/
     class function IsArrayExportable(const aMember: TRttiMember): Boolean;
@@ -1162,35 +1162,31 @@ type
     class function IsIgnoredObject(r: TRttiObject): Boolean;
     class function GetObjectName(r: TRttiNamedObject): string;
     class function GetObjectDefault(r: TRttiObject; const obj: ISuperObject): ISuperObject;
-    {+} // https://code.google.com/p/superobject/issues/detail?id=16
-    {$IFDEF USE_REFLECTION}
+    {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
     class function GetPropertyDefault(r: TRttiProperty; const obj: ISuperObject): ISuperObject;
     class function GetPropertyName(r: TRttiProperty): string;
     function Array2Class(const Value: TValue; const index: ISuperObject): TSuperObject;
     {$ENDIF USE_REFLECTION}
-    {+.}
   public
     Context: TRttiContext;
     SerialFromJson: TDictionary<PTypeInfo, TSerialFromJson>;
     SerialToJson: TDictionary<PTypeInfo, TSerialToJson>;
-    {+} // https://code.google.com/p/superobject/issues/detail?id=16
-    {$IFDEF USE_REFLECTION}
-    FieldsVisibility: set of TMemberVisibility;
-    PropertiesVisibility: set of TMemberVisibility;
+    {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
+    FieldsVisibility: set of TMemberVisibility; // default: [mvPrivate, mvProtected, mvPublic, mvPublished]
+    PropertiesVisibility: set of TMemberVisibility; // default: []
     {$ENDIF}
-    {+.}
-    SuperDateTimeZoneHandling: TSuperDateTimeZoneHandling;
-    SuperDateFormatHandling: TSuperDateFormatHandling;
+    SuperDateTimeZoneHandling: TSuperDateTimeZoneHandling; // default: sdzUTC
+    SuperDateFormatHandling: TSuperDateFormatHandling; // default: sdfISO
 
     constructor Create; virtual;
     destructor Destroy; override;
+
     function FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function ToJson(var value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function AsType<T>(const obj: ISuperObject): T;
     function AsJson<T>(const obj: T; const index: ISuperObject = nil): ISuperObject;
-    {+}
-    property ForceSerializer: Boolean read FForceSerializer write FForceSerializer;
-    {+.}
+
+    property ForceSerializer: Boolean read FForceSerializer write FForceSerializer; // default False;
   end;
 
   TSuperObjectHelper = class helper for TObject
