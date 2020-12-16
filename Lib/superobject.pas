@@ -9139,12 +9139,6 @@ begin
     stString:
       begin
         SValue := string(obj.AsString);
-//        if SValue = '[]' then begin
-//          i := 0; // [] == "0" ; empty set
-//          TValue.Make(@i, ATypeInfo, Value);
-//          Result := True;
-//          Exit;
-//        end;
         Result := TryStrToInt(SValue, i)
           and jFromInt(ATypeInfo, obj, Value);
         if (not Result) and FForceEnumeration then begin
