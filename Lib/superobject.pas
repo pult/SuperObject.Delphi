@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1216.0545
+{ superobject.pas } // version: 2020.1216.1017
 (*
  *                         Super Object Toolkit
  *
@@ -1147,7 +1147,19 @@ type
   SOName = class(TSuperAttribute);
   SODefault = class(TSuperAttribute);
   SOArray = TArrayAttribute;
-//SOType = class(TSuperAttribute);
+
+  TSuperTypeMap = class(TCustomAttribute)
+  protected
+    FTypeInfo: PTypeInfo;
+  public
+    constructor Create(ATypeInfo: PTypeInfo);
+  end;
+  SOType = TSuperTypeMap;
+
+  SOTypeMap<T> = class(TSuperTypeMap) // DX ERROR: Failed call attribute constructor for generic attribute class
+  public
+    constructor Create();
+  end;
 
   TSuperDateTimeZoneHandling = (sdzLOCAL, sdzUTC);
   TSuperDateFormatHandling = (sdfJava, sdfISO, sdfUnix, sdfFormatSettings);
@@ -1157,12 +1169,15 @@ type
     FForceDefault: Boolean;
     FForceEnumeration: Boolean;
     FForceBaseType: Boolean;
+    FForceTypeMap: Boolean;
     FForceSerializer: Boolean; // https://code.google.com/p/superobject/issues/detail?id=64
     // https://github.com/hgourvest/superobject/pull/13/
     class function IsArrayExportable(const aMember: TRttiMember): Boolean;
     class function IsExportable(const aType: TRttiType; const Element: TClassElement): Boolean;
     class function IsIgnoredName(const aType: TRttiType; const aMember: TRttiMember): Boolean;
     class function IsIgnoredObject(r: TRttiObject): Boolean;
+    class function GetObjectTypeInfo(r: TRttiObject; aDef: PTypeInfo): PTypeInfo; overload;
+    function GetObjectTypeInfo(aType: PTypeInfo): PTypeInfo; overload;
     class function GetObjectName(r: TRttiNamedObject): string;
     class function GetObjectDefault(r: TRttiObject; const obj: ISuperObject): ISuperObject;
     {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
@@ -1206,6 +1221,7 @@ type
 
     property ForceDefault: Boolean read FForceDefault write FForceDefault; // default True;
     property ForceBaseType: Boolean read FForceBaseType write FForceBaseType; // default True;
+    property ForceTypeMap: Boolean read FForceTypeMap write FForceTypeMap; // default False;
     property ForceEnumeration: Boolean read FForceEnumeration write FForceEnumeration; // default True;
     property ForceSerializer: Boolean read FForceSerializer write FForceSerializer; // default False;
   end;
@@ -8597,6 +8613,22 @@ begin
   Result := SameText(FIgnoredName, AName);
 end;
 
+{ TSuperTypeMap }
+
+constructor TSuperTypeMap.Create(ATypeInfo: PTypeInfo);
+begin
+  inherited Create;
+  FTypeInfo := ATypeInfo;
+end;
+
+{ SOTypeMap<T> }
+
+constructor SOTypeMap<T>.Create();
+begin
+  inherited Create(nil);
+  FTypeInfo := TypeInfo(T);
+end;
+
 { TSuperRttiContext }
 
 constructor TSuperRttiContext.Create;
@@ -8606,6 +8638,7 @@ begin
   FForceDefault := True;
   FForceEnumeration := True; // OLD: False
   FForceBaseType := True; // OLD: False
+  FForceTypeMap := False;
   FForceSerializer := False;
 
   SuperDateTimeZoneHandling := sdzUTC;
@@ -8692,6 +8725,33 @@ begin
     end;
   end;
   Result := False;
+end;
+
+class function TSuperRttiContext.GetObjectTypeInfo(r: TRttiObject; aDef: PTypeInfo): PTypeInfo;
+var
+  A: TCustomAttribute;
+begin //@dbg: r.Name
+  for A in r.GetAttributes do begin
+    if A.InheritsFrom(TSuperTypeMap) then begin
+      Result := TSuperTypeMap(A).FTypeInfo;
+      Exit;
+    end;
+  end;
+  //if r is TRttiType then
+  //  Result := r.Handle
+  //else
+  Result := aDef;
+end;
+
+function TSuperRttiContext.GetObjectTypeInfo(aType: PTypeInfo): PTypeInfo;
+var
+  r: TRttiType;
+begin
+  r := Context.GetType(aType);
+  if Assigned(r) then
+    Result := GetObjectTypeInfo(r, {Default:}aType)
+  else
+    Result := aType;
 end;
 
 class function TSuperRttiContext.GetObjectName(r: TRttiNamedObject): string;
@@ -8924,19 +8984,23 @@ function TSuperRttiContext.FromJson(ATypeInfo: PTypeInfo; const obj: ISuperObjec
   procedure FromClass();
   var
     {$IFNDEF FPC}
-    f: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
+    LRttiField: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
     {$ENDIF}
-    v: TValue;
+    LValue: TValue;
     {+} // https://code.google.com/p/superobject/issues/detail?id=39
-    vArray: {+}ISuperArray{+.};
+    LArrObj: {+}ISuperArray{+.};
     i: Integer;
     AMethod: TRttiMethod;
     {+.}
-    {+} // https://code.google.com/p/superobject/issues/detail?id=16
-    {$IFDEF USE_REFLECTION}
-    p: TRttiProperty;
+    {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
+    LRttiProp: TRttiProperty;
     {$ENDIF}
-    {+.}
+    LTypeInfo: PTypeInfo;
+    {$IFDEF USE_REFLECTION}
+    LBasedType: PTypeInfo;
+    {$ENDIF}
+    LValObj: ISuperObject;
+    LRttiType: TRttiType;
   begin
     case ObjectGetType(obj) of
       stObject:
@@ -8946,21 +9010,34 @@ function TSuperRttiContext.FromJson(ATypeInfo: PTypeInfo; const obj: ISuperObjec
             Value := GetTypeData(ATypeInfo).ClassType.Create;
           {$IFNDEF FPC} // FPC: Currently not supported rtti for Fields
           {+} // https://code.google.com/p/superobject/issues/detail?id=16
+          //
+          // FIELDS:
+          //
           {$IFDEF USE_REFLECTION}
           if FieldsVisibility <> [] then
           {$ENDIF}
           {+.}
-          for f in Context.GetType(Value.AsObject.ClassType).GetFields do
+          for LRttiField in Context.GetType(Value.AsObject.ClassType).GetFields do
             {+} // https://code.google.com/p/superobject/issues/detail?id=16
-            if (f.FieldType <> nil) {$IFDEF USE_REFLECTION} and (f.Visibility in FieldsVisibility)
-              and (f.GetCustomAttribute<SOIgnore> = nil) {$ENDIF} then
+            if (LRttiField.FieldType <> nil) {$IFDEF USE_REFLECTION} and (LRttiField.Visibility in FieldsVisibility)
+              and (LRttiField.GetCustomAttribute<SOIgnore> = nil) {$ENDIF} then
             {+.}
             begin
-              v := TValue.Empty;
-              Result := FromJson(f.FieldType.Handle, GetObjectDefault(f, obj.AsObject[GetObjectName(f)]), v);
+              LValue := TValue.Empty;
+              LTypeInfo := LRttiField.FieldType.Handle;
+              {$IFDEF USE_REFLECTION}
+              if FForceTypeMap then begin
+                LBasedType := GetObjectTypeInfo(LRttiField, LTypeInfo);
+                if (LTypeInfo <> LBasedType) and (LTypeInfo.Kind = LBasedType.Kind) then
+                  LTypeInfo := LBasedType;
+              end;
+              {$ENDIF USE_REFLECTION}
+              LValObj := obj.AsObject[GetObjectName(LRttiField)];
+              LValObj := GetObjectDefault(LRttiField, LValObj);
+              Result := FromJson(LTypeInfo, LValObj, LValue);
               if Result then
               {+} // https://code.google.com/p/superobject/issues/detail?id=64
-                f.SetValue(Value.AsObject, v)
+                LRttiField.SetValue(Value.AsObject, LValue)
               else if ForceSerializer then
                 Result := True
               else
@@ -8971,16 +9048,26 @@ function TSuperRttiContext.FromJson(ATypeInfo: PTypeInfo; const obj: ISuperObjec
           {$ENDIF !FPC}
           {+} // https://code.google.com/p/superobject/issues/detail?id=16
           {$IFDEF USE_REFLECTION}
+          //
+          // PROPERTIES:
+          //
           if PropertiesVisibility <> [] then
-          for p in Context.GetType(Value.AsObject.ClassType).GetProperties do
-            if (p.PropertyType <> nil) and (p.Visibility in PropertiesVisibility)
-            and (p.GetCustomAttribute<SOIgnore> = nil) then
+          for LRttiProp in Context.GetType(Value.AsObject.ClassType).GetProperties do
+            if (LRttiProp.PropertyType <> nil) and (LRttiProp.Visibility in PropertiesVisibility)
+            and (LRttiProp.GetCustomAttribute<SOIgnore> = nil) then
             begin
-              v := TValue.Empty;
-              Result := FromJson(p.PropertyType.Handle,
-                GetPropertyDefault(p, obj.AsObject[SOString(GetPropertyName(p))]), v);
+              LValObj := obj.AsObject[SOString(GetPropertyName(LRttiProp))];
+              LValObj := GetPropertyDefault(LRttiProp, LValObj);
+              LTypeInfo := LRttiProp.PropertyType.Handle;
+              if FForceTypeMap then begin
+                LBasedType := GetObjectTypeInfo(LRttiProp, LTypeInfo);
+                if (LTypeInfo <> LBasedType) and (LTypeInfo.Kind = LBasedType.Kind) then
+                  LTypeInfo := LBasedType;
+              end;
+              LValue := TValue.Empty;
+              Result := FromJson(LTypeInfo, LValObj, LValue);
               if Result then
-                p.SetValue(Value.AsObject, v)
+                LRttiProp.SetValue(Value.AsObject, LValue)
               else if ForceSerializer then
                 Result := True
               else
@@ -8994,25 +9081,21 @@ function TSuperRttiContext.FromJson(ATypeInfo: PTypeInfo; const obj: ISuperObjec
       stArray:
         begin
           Result := False;
-
           if IsList(Context, ATypeInfo) and IsGenericType(ATypeInfo) then
           begin
             Result := True;
-
             if Value.Kind <> tkClass then
               Value := GetTypeData(ATypeInfo).ClassType.Create;
-
             AMethod := Context.GetType(Value.AsObject.ClassType).GetMethod('Add');
-
-            vArray := obj.AsArray;
-            for I := 0 to vArray.Length-1 do
+            LArrObj := obj.AsArray;
+            for I := 0 to LArrObj.Length-1 do
             begin
-              v := TValue.Empty;
-
-              Result := FromJson(GetDeclaredGenericType(Context, ATypeInfo).Handle, vArray[i], v);
-
+              LValue := TValue.Empty;
+              LRttiType := GetDeclaredGenericType(Context, ATypeInfo);
+              LTypeInfo := LRttiType.Handle;
+              Result := FromJson(LTypeInfo, LArrObj[i], LValue);
               if Result then
-                AMethod.Invoke(Value.AsObject, [v])
+                AMethod.Invoke(Value.AsObject, [LValue])
               else
                 Exit;
             end;
@@ -9028,7 +9111,7 @@ function TSuperRttiContext.FromJson(ATypeInfo: PTypeInfo; const obj: ISuperObjec
       // error
       Value := nil;
       Result := False;
-    end;
+    end; // case
   end;
 
   {$IFNDEF FPC} // FPC: Currently not supported rtti for Fields
@@ -9038,48 +9121,47 @@ function TSuperRttiContext.FromJson(ATypeInfo: PTypeInfo; const obj: ISuperObjec
     pValue: Pointer;
     LValue: TValue;
     fieldObj: ISuperObject;
+    LFieldType: PTypeInfo;
+    {$IFDEF USE_REFLECTION}
+    LBasedType: PTypeInfo;
+    {$ENDIF USE_REFLECTION}
   begin
     Result := True;
     TValue.Make(nil, ATypeInfo, Value);
     for LRttiField in Context.GetType(ATypeInfo).GetFields do
     begin
       if ObjectIsType(obj, stObject) and (LRttiField.FieldType <> nil) then
-      begin
-        {$IFDEF VER210}
-        pValue := IValueData(TValueData(Value).FHeapData).GetReferenceToRawData;
-        {$ELSE}
-        pValue := TValueData(Value).FValueData.GetReferenceToRawData;
-        {$ENDIF}
+      begin // @dbg: LRttiField.FieldType.Handle^
         {+} // https://code.google.com/p/superobject/issues/detail?id=40
-        {
-        Result := FromJson(LRttiField.FieldType.Handle, GetObjectDefault(f, obj.AsObject[GetObjectName(LRttiField)]), LValue);
-        if Result then
-          LRttiField.SetValue(pValue, LValue)
-        else
-        begin
-          //Writeln(LRttiField.Name);
-          Exit;
-        end;
-        }
         fieldObj := obj.AsObject[GetObjectName(LRttiField)];
-        fieldObj := GetObjectDefault(LRttiField, fieldObj);
-        if FromJson(LRttiField.FieldType.Handle, fieldObj, LValue) then
-          LRttiField.SetValue(pValue, LValue);
-        {?// https://github.com/hgourvest/superobject/pull/19/
-        fieldObj := obj.AsObject[GetObjectName(LRttiField)];
-        if Assigned(fieldObj) then // ATRLP: 20160708: optional (no value in JSON) fields are allowed
+        //?if Assigned(fieldObj) then // ATRLP: 20160708: optional (no value in JSON) fields are allowed // https://github.com/hgourvest/superobject/pull/19/
         begin
-          if FromJson(LRttiField.FieldType.Handle, GetObjectDefault(LRttiField, fieldObj), LValue) then
+          fieldObj := GetObjectDefault(LRttiField, fieldObj);
+          LFieldType := LRttiField.FieldType.Handle;
+          {$IFDEF USE_REFLECTION}
+          if FForceTypeMap then begin
+            LBasedType := GetObjectTypeInfo(LRttiField, LFieldType);
+            if (LFieldType <> LBasedType) and (LFieldType.Kind = LBasedType.Kind) then
+              LFieldType := LBasedType;
+          end;
+          {$ENDIF USE_REFLECTION}
+          if FromJson(LFieldType, fieldObj, LValue) then begin
+            {$IFDEF VER210}
+            pValue := IValueData(TValueData(Value).FHeapData).GetReferenceToRawData;
+            {$ELSE}
+            pValue := TValueData(Value).FValueData.GetReferenceToRawData;
+            {$ENDIF}
             LRttiField.SetValue(pValue, LValue);
-        end;}
+          end;
+        end;
         fieldObj := nil;
         {+.}
       end else
       begin
         Result := False;
-        Exit;
+        //Exit;
       end;
-    end;
+    end; // for
   end;
   {$ENDIF !FPC}
 
@@ -9567,14 +9649,16 @@ function TSuperRttiContext.jToClass(var Value: TValue; const index: ISuperObject
 var
   t: TRttiType;
   {$IFNDEF FPC}
-  f: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
+  LField: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
   {$ENDIF !FPC}
-  {+} // https://code.google.com/p/superobject/issues/detail?id=16
-  {$IFDEF USE_REFLECTION}
-  p: TRttiProperty;
+  {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
+  LProp: TRttiProperty;
   {$ENDIF}
-  {+.}
-  v: TValue;
+  {$IFDEF USE_REFLECTION}
+  LType, LTypeMap: PTypeInfo; LValueMap: TValue;
+  {$ENDIF USE_REFLECTION}
+  LValue: TValue;
+  LObject: ISuperObject;
 begin
   Result := nil;
   if TValueData(Value).FAsObject = nil then
@@ -9599,24 +9683,43 @@ begin
     if IsExportable(t, ceField) then // https://github.com/hgourvest/superobject/pull/13
     {$ENDIF USE_REFLECTION}
     begin
-      for f in t.GetFields do begin
+      for LField in t.GetFields do begin
         {+} // https://code.google.com/p/superobject/issues/detail?id=16
-        if (f.FieldType <> nil)
+        if (LField.FieldType <> nil)
           {$IFDEF USE_REFLECTION}
-          and (f.Visibility in FieldsVisibility)
-          //-and (f.GetCustomAttribute<SOIgnore> = nil)
-          and (not IsIgnoredObject(f)) // https://github.com/hgourvest/superobject/pull/13
-          and (not isIgnoredName(t, f))
+          and (LField.Visibility in FieldsVisibility)
+          //-and (LField.GetCustomAttribute<SOIgnore> = nil)
+          and (not IsIgnoredObject(LField)) // https://github.com/hgourvest/superobject/pull/13
+          and (not isIgnoredName(t, LField))
           {$ENDIF USE_REFLECTION}
         {+.}
         then begin
-          v := f.GetValue(Value.AsObject);
+          LObject := nil;
+          LValue := LField.GetValue(Value.AsObject);
           {$IFDEF USE_REFLECTION}
-          if IsArrayExportable(f) then
-            Result.AsObject[getObjectName(f)] := Array2Class(v, index)
-          else
+          if FForceTypeMap then begin
+            //
+            // Check attributes: +[SOType(TypeInfo(T))] or -[SOTypeMap<T>]
+            //
+            LType := LValue.TypeInfo;
+            LTypeMap := GetObjectTypeInfo(LField, {Default:}LType);
+            if (LTypeMap <> LType) then begin
+              //--if LValue.TryCast(LTypeMap, LValueMap) then begin // Failed TypeInfo after castiing
+              if (LTypeMap.Kind = LType.Kind) then begin
+                TValue.Make(LValue.GetReferenceToRawData(), LTypeMap, LValueMap);
+                LValue := LValueMap;
+              end;
+            end;
+          end;
+          if IsArrayExportable(LField) then begin
+            LObject := Array2Class(LValue, index);
+          end else
           {$ENDIF USE_REFLECTION}
-            Result.AsObject[getObjectName(f)] := ToJson(v, index);
+          begin
+            LObject := ToJson(LValue, index);
+          end;
+          if Assigned(LObject) then
+            Result.AsObject[getObjectName(LField)] := LObject;
         end;
       end; // for
     end; // if IsExportable
@@ -9633,17 +9736,33 @@ begin
     //
     if IsExportable(t, ceProperty) then // https://github.com/hgourvest/superobject/pull/13
     begin
-      for p in t.GetProperties do begin
-        if (p.PropertyType <> nil) and (p.Visibility in PropertiesVisibility)
-          //-and (p.GetCustomAttribute<SOIgnore> = nil)
-          and (not IsIgnoredObject(p)) // https://github.com/hgourvest/superobject/pull/13
-          and (not isIgnoredName(t, p))
+      for LProp in t.GetProperties do begin
+        if (LProp.PropertyType <> nil) and (LProp.Visibility in PropertiesVisibility)
+          //-and (LProp.GetCustomAttribute<SOIgnore> = nil)
+          and (not IsIgnoredObject(LProp)) // https://github.com/hgourvest/superobject/pull/13
+          and (not isIgnoredName(t, LProp))
         then begin
-          v := p.GetValue(Value.AsObject);
-          if IsArrayExportable(p) then
-            Result.AsObject[SOString(getObjectName(p))] := Array2Class(v, index)
+          LValue := LProp.GetValue(Value.AsObject);
+          if FForceTypeMap then begin
+            //
+            // Check attributes: +[SOType(TypeInfo(T))] or -[SOTypeMap<T>]
+            //
+            LType := LValue.TypeInfo;
+            LTypeMap := GetObjectTypeInfo(LProp, {Default:}LType);
+            if (LTypeMap <> LType) then begin
+              //--if LValue.TryCast(LTypeMap, LValueMap) then begin // Failed TypeInfo after castiing
+              if (LTypeMap.Kind =  LType.Kind) then begin
+                TValue.Make(LValue.GetReferenceToRawData(), LTypeMap, LValueMap);
+                LValue := LValueMap;
+              end;
+            end;
+          end;
+          if IsArrayExportable(LProp) then
+            LObject := Array2Class(LValue, index)
           else
-            Result.AsObject[SOString(getObjectName(p))] := ToJson(v, index);
+            LObject := ToJson(LValue, index);
+          if Assigned(LObject) then
+            Result.AsObject[SOString(getObjectName(LProp))] := LObject;
         end
       end; // for
     end; // if IsExportable
@@ -9717,6 +9836,9 @@ function TSuperRttiContext.jToRecord(var Value: TValue; const index: ISuperObjec
 var
   LField: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
   LValue: TValue;
+  {$IFDEF USE_REFLECTION}
+  LType, LTypeMap: PTypeInfo; LValueMap: TValue;
+  {$ENDIF USE_REFLECTION}
   LObject: ISuperObject;
 {$ENDIF !FPC}
 begin
@@ -9725,7 +9847,7 @@ begin
   {$ELSE}
   Result := TSuperObject.Create(stObject);
   for LField in Context.GetType(Value.TypeInfo).GetFields do begin
-    {$IFDEF USE_REFLECTION}
+    {$IFDEF USE_REFLECTION} //@dbg: TRttiType(LField).Name
     //-if (LField.GetCustomAttribute<SOIgnore> = nil) then
     if (not IsIgnoredObject(LField)) then // https://github.com/hgourvest/superobject/pull/13
     {$ENDIF USE_REFLECTION}
@@ -9735,6 +9857,24 @@ begin
       {$ELSE}
       LValue := LField.GetValue(TValueData(Value).FValueData.GetReferenceToRawData);
       {$ENDIF}
+
+      {$IFDEF USE_REFLECTION}
+      if FForceTypeMap then begin
+        //
+        // Check attributes: +[SOType(TypeInfo(T))] or -[SOTypeMap<T>]
+        //
+        LType := LValue.TypeInfo;
+        LTypeMap := GetObjectTypeInfo(LField, {Default:}LType);
+        if (LTypeMap <> LType) then begin
+          //--if LValue.TryCast(LTypeMap, LValueMap) then begin // Failed TypeInfo after castiing
+          if (LTypeMap.Kind =  LType.Kind) then begin
+            TValue.Make(LValue.GetReferenceToRawData(), LTypeMap, LValueMap);
+            LValue := LValueMap;
+          end;
+        end;
+      end;
+      {$ENDIF USE_REFLECTION}
+
       LObject := ToJson(LValue, Index);
       if Assigned(LObject) then
         Result.AsObject[GetObjectName(LField)] := LObject;
@@ -9846,7 +9986,7 @@ begin
   Result := nil;
   if Value.IsEmpty and (not FForceDefault) then
     Exit;
-  LType := Value.TypeInfo;
+  LType := Value.TypeInfo; //@dbg: Value.FTypeInfo^
   if SerialToJson.TryGetValue(LType, Serial) then begin
     Result := Serial(Self, Value, index);
     Exit;
@@ -9967,6 +10107,10 @@ begin
   end;
   if (BaseType = CustomType) then
     Exit;
+  if (CustomType.Kind <> BaseType.Kind) then begin
+    // Error: Types is diff sizes
+    Exit;
+  end;
   if (SuperTypeInfoDictionary = nil) then
     SuperTypeInfoDictionary := TDictionary<Pointer, Pointer>.Create;
   SuperTypeInfoDictionary.AddOrSetValue(CustomType,BaseType);

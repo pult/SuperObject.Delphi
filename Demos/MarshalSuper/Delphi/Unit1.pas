@@ -39,13 +39,19 @@ uses
 
 type
   TCustomDataTime = type TDateTime;
+  TCustomDataTime2 = type TDateTime;
   TCustomBoolean = type Boolean; // marshaled into texts CustomBooleanValues
 
   TCustomRecord = record
-    [SOName('D')]
-    DataTimeField : TCustomDataTime;
+    [SOName('DATE_1')]
+    DataTimeField1: TCustomDataTime;
 
-    [SOName('B')]
+    [SOName('DATE_2')]
+    //--[SOTypeMap<TDateTime>] // DX ERROR: Failed call attribute constructor
+    [SOType(TypeInfo(TDateTime))]
+    DataTimeField2: TCustomDataTime2;
+
+    [SOName('BOOL')]
     BooleanField: TCustomBoolean;
 
     [SOIgnore]
@@ -130,8 +136,12 @@ begin
   //D := Now();
   //S := JsonSerializer.Marshal<TDateTime>(D);
 
-  D.DataTimeField := Now();
+  // Fill TCustomRecord
+  D.DataTimeField1 := Now();
+  D.DataTimeField2 := D.DataTimeField1-1;
   D.BooleanField := True;
+  D.UnusedField := 'Unused';
+
   S := JsonSerializer.Marshal<TCustomRecord>(D);
 
   Memo1.Text := S;
@@ -147,27 +157,28 @@ begin
 
   //JsonSerializer.Unmarshal<TDateTime>(S, D);
 
-  D.DataTimeField := 0;
+  D.DataTimeField1 := 0;
+  D.DataTimeField2 := 0;
   D.BooleanField := False;
   D.UnusedField := 'Unused';
   JsonSerializer.Unmarshal<TCustomRecord>(S, D);
 
-  //-S := FormatDateTime('yyyy-mm-dd hh:nn:ss', D);
-  //-S := FormatDateTime('yyyy-mm-dd hh:nn:ss', D.DataTimeField);
-
   //S := DelphiDateToISO8601(D);
-  S := DelphiDateToISO8601(D.DataTimeField);
-
   //S := 'date: "'+S+'"';
+
   S := '{'#13#10
-    +'  "DataTimeField": "' + S + '",'#13#10
-    +'  "BooleanField":  "' + CustomBooleanValues[D.BooleanField] + '"'#13#10
+    +'  "DataTimeField2": "' + DelphiDateToISO8601(D.DataTimeField2) + '",'#13#10
+    +'  "DataTimeField1": "' + DelphiDateToISO8601(D.DataTimeField1) + '",'#13#10
+    +'  "BooleanField":   "' + CustomBooleanValues[D.BooleanField] + '"'#13#10
   +'}';//}
+
   ShowMessage(S);
 end;
 
 initialization
-  // Map TCustomDataTime into TDateTime
+  // Map TCustomDataTime2 into TDateTime
+  SuperRttiContextDefault.ForceTypeMap := True; // Allow use attributes +[SOType(TypeInfo(T))] or -[SOTypeMap<T>]
+  // Map TCustomDataTime to TDateTime
   SuperRegisterCustomTypeInfo(TypeInfo(TCustomDataTime), TypeInfo(TDateTime));
   // Map TCustomBoolean into Boolean
   SuperRegisterCustomTypeInfo(TypeInfo(TCustomBoolean), TypeInfo(Boolean));
