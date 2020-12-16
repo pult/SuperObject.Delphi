@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1216.2025
+{ superobject.pas } // version: 2020.1217.0017
 (*
  *                         Super Object Toolkit
  *
@@ -123,10 +123,10 @@ unit superobject;
     {$define FPC_UNICODE}
   {$ENDIF}
   {$define HAVE_RTTI} // optional
-{$define NEED_FORMATSETTINGS} // optional
+  {$define NEED_FORMATSETTINGS} // optional
   //?{$POINTERMATH OFF}
   //{$define HAVE_FOR_IN}
-{$ELSE}
+{$ELSE !FPC}
   {$undef NEED_FORMATSETTINGS}
   {$IFDEF CONDITIONALEXPRESSIONS}
     {$if CompilerVersion >= 17} // Delphi 2005
@@ -142,7 +142,7 @@ unit superobject;
   {$IFDEF UNICODE}
     {$define DELPHI_UNICODE}
   {$ENDIF}
-{$ENDIF}
+{$ENDIF !FPC}
 {$IFDEF AUTOREFCOUNT}
   {$define HAVE_RTTI}
 {$ENDIF}
@@ -241,7 +241,7 @@ uses
   ;
 
 const
-  SuperObjectVersion = 20201216;
+  SuperObjectVersion = 20201217;
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
   {$EXTERNALSYM SuperObjectVerInfo}
@@ -253,7 +253,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 20201216}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 20201217}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -1188,6 +1188,7 @@ type
   TSuperRttiContext = class
   protected
     FForceDefault: Boolean;
+    FForceSet: Boolean;
     FForceEnumeration: Boolean;
     FForceBaseType: Boolean;
     FForceTypeMap: Boolean;
@@ -1219,6 +1220,7 @@ type
     function jToClass(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToWChar(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToEnumeration(var Value: TValue; const index: ISuperObject = nil): ISuperObject;
+    function jToSet(var Value: TValue; const index: ISuperObject = nil): ISuperObject;
     function jToVariant(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToRecord(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToArray(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
@@ -1230,6 +1232,7 @@ type
     function jFromWideChar(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromInt64(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromInt(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
+    function jFromEnumeration(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromSet(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromFloat(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromString(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
@@ -1270,6 +1273,7 @@ type
     property ForceDefault: Boolean read FForceDefault write FForceDefault; // default True;
     property ForceBaseType: Boolean read FForceBaseType write FForceBaseType; // default True;
     property ForceTypeMap: Boolean read FForceTypeMap write FForceTypeMap; // default False;
+    property ForceSet: Boolean read FForceSet write FForceSet; // default True;
     property ForceEnumeration: Boolean read FForceEnumeration write FForceEnumeration; // default True;
     property ForceSerializer: Boolean read FForceSerializer write FForceSerializer; // default False;
     // RWSynchronize - multithreaded protected access to rtti object
@@ -1358,6 +1362,10 @@ var
 procedure SuperRegisterCustomTypeInfo(CustomType, BaseType: PTypeInfo);
 procedure SuperUnRegisterCustomTypeInfo(CustomType: PTypeInfo);
 function  SuperBaseTypeInfo(CustomType: PTypeInfo): PTypeInfo; {$IFDEF HAVE_INLINE}inline;{$ENDIF}
+
+function SuperSetToString(ATypeInfo: PTypeInfo; const ASetValue: Pointer; Brackets: Boolean): string; overload;
+function SuperSetToString(ATypeInfo: PTypeInfo; const ASetValue; Brackets: Boolean): string; overload;
+function SuperStringToSet(TypeInfo: PTypeInfo; const Value: string): Integer; // Safe "StringToSet(PTypeInfo...)"
 {+.}
 {$ENDIF HAVE_RTTI}
 
@@ -8730,6 +8738,7 @@ begin
   inherited;
 
   FForceDefault := True;
+  FForceSet := True; // OLD: False
   FForceEnumeration := True; // OLD: False
   FForceBaseType := True; // OLD: False
   FForceTypeMap := False;
@@ -9103,9 +9112,192 @@ begin
   end; // case
 end;
 
+function TSuperRttiContext.jFromEnumeration(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean;
+var
+  SValue: string;
+  i: Integer;
+  TypeData: PTypeData;
+begin
+  case ObjectGetType(obj) of
+    stInt:
+      begin
+        i := obj.AsInteger;
+        if (i = -1) then begin // "-1" == True
+           TValue.Make(nil, ATypeInfo, Value);
+           TypeData := Value.TypeInfo.TypeData;
+           if (TypeData.MinValue = 0) and (TypeData.MaxValue = 1) then begin
+             i := 1; // "-1" == True
+             TValue.Make(@i, ATypeInfo, Value);
+             Result := True;
+             Exit;
+           end;
+        end;
+        Result := jFromInt(ATypeInfo, obj, Value);
+      end;
+    stBoolean:
+      Result := jFromInt(ATypeInfo, obj, Value);
+    stString:
+      begin
+        SValue := string(obj.AsString);
+//        if SValue = '[]' then begin
+//          i := 0; // [] == "0" ; empty set
+//          TValue.Make(@i, ATypeInfo, Value);
+//          Result := True;
+//          Exit;
+//        end;
+        Result := TryStrToInt(SValue, i)
+          and jFromInt(ATypeInfo, obj, Value);
+        if (not Result) and FForceEnumeration then begin
+           TValue.Make(nil, ATypeInfo, Value);
+           TypeData := Value.TypeInfo.TypeData;
+            if (TypeData.MinValue = 0) and (TypeData.MaxValue = 1)
+              and ( SameText(SValue, 'True') or SameText(SValue, 'False')
+                or SameText(SValue, '1') or (SValue = '-1') or (SValue = '0')
+              )
+            then
+            begin
+              if SameText(SValue, 'True') or (SValue = '1') or (SValue = '-1')
+              then i := 1
+              else i := 0;
+              TValue.Make(@i, ATypeInfo, Value);
+              Result := True;
+            end else begin
+              i := {TypInfo.pas}GetEnumValue(ATypeInfo, SValue);
+              if i >= 0 then begin
+                TValue.Make(@i, ATypeInfo, Value);
+                //?class function TRttiEnumerationType.GetValue<T{: enum}>(const AName: string): T;
+                Result := True;
+              end;
+            end;
+        end;
+      end;
+    else
+      Result := False;
+  end; // case
+end;
+
+function SuperSetToString(ATypeInfo: PTypeInfo; const ASetValue: Pointer; Brackets: Boolean): string;
+begin
+  if (ATypeInfo = nil) or (ATypeInfo.Kind <> tkSet) or (ASetValue = nil) then
+    Exit;
+  {$IF defined(FPC) or (CompilerVersion >= 30.00)} // @dbg: ATypeInfo.TypeData.SetTypeOrSize
+  Result := TypInfo.SetToString(ATypeInfo, ASetValue, Brackets);
+  {$ELSE}
+  Result := TypInfo.SetToString(ATypeInfo, Integer(Word(ASetValue^)), Brackets);
+  {$IFEND}
+end;
+
+function SuperSetToString(ATypeInfo: PTypeInfo; const ASetValue; Brackets: Boolean): string;
+begin
+  if (ATypeInfo = nil) or (ATypeInfo.Kind <> tkSet) or (@ASetValue = nil) then
+    Exit;
+  {$IF defined(FPC) or (CompilerVersion >= 30.00)} // @dbg: ATypeInfo.TypeData.SetTypeOrSize
+  Result := TypInfo.SetToString(ATypeInfo, Pointer(@ASetValue), Brackets);
+  {$ELSE}
+  Result := TypInfo.SetToString(ATypeInfo, Integer(Word(ASetValue)), Brackets);
+  {$IFEND}
+end;
+
+(*function SuperStringToSet(TypeInfo: PTypeInfo; const Value: string): Integer;
+// Safe implementation of "TypInfo.pas"."StringToSet(PTypeInfo...)"
+begin
+  if (TypeInfo = nil) then begin
+    Result := -1;
+    Exit;
+  end;
+  try
+    Result := {TypInfo.}StringToSet(TypeInfo, Value);
+  except
+    Result := -1;
+  end;
+end;//*)
+function SuperStringToSet(TypeInfo: PTypeInfo; const Value: string): Integer;
+// Safe implementation of "TypInfo.pas"."StringToSet(PTypeInfo...)"
+var
+  P: PChar;
+  EnumName: string;
+  EnumValue: NativeInt;
+  PEnumInfo: PPTypeInfo;
+
+  // grab the next enum name
+  function NextWord(var P: PChar): string;
+  var
+    i: Integer;
+  begin
+    i := 0;
+
+    // scan til whitespace
+    while not (CharInSet(P[i], [',', ' ', #0,']'])) do
+      Inc(i);
+
+    SetString(Result, P, i);
+
+    // skip whitespace
+    while (CharInSet(P[i], [',', ' ',']'])) do
+      Inc(i);
+
+    Inc(P, i);
+  end;
+
+begin
+  {+}
+  if (TypeInfo = nil) then begin
+    Result := -1;
+    Exit;
+  end;
+  {+.}
+  Result := 0;
+  if Value = '' then Exit;
+  P := PChar(Value);
+
+  // skip leading bracket and whitespace
+  while (CharInSet(P^, ['[',' '])) do
+    Inc(P);
+
+  PEnumInfo := GetTypeData(TypeInfo)^.CompType;
+  if PEnumInfo <> nil then
+  begin
+    EnumName := NextWord(P);
+    while EnumName <> '' do
+    begin
+      EnumValue := GetEnumValue(PEnumInfo^, EnumName);
+      if EnumValue < 0 then
+      {+}
+      begin
+        //raise EPropertyConvertError.CreateResFmt(@SInvalidPropertyElement, [EnumName]);
+        Result := -1;
+        Exit;
+      end;
+      {+.}
+      Include(TIntegerSet(Result), enumvalue);
+      EnumName := NextWord(P);
+    end;
+  end
+  else
+  begin
+    EnumName := NextWord(P);
+    while EnumName <> '' do
+    begin
+      EnumValue := StrToIntDef(EnumName, -1);
+      if EnumValue < 0 then
+      {+}
+      begin
+        //raise EPropertyConvertError.CreateResFmt(@SInvalidPropertyElement, [EnumName]);
+        Result := -1;
+        Exit;
+      end;
+      {+.}
+      Include(TIntegerSet(Result), enumvalue);
+      EnumName := NextWord(P);
+    end;
+  end;
+end; // function SuperStringToSet
+//*)
+
 function TSuperRttiContext.jFromSet(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean;
 var
   i: Integer;
+  SValue: string;
 begin
   case ObjectGetType(obj) of
     stInt:
@@ -9116,10 +9308,23 @@ begin
       end;
     stString:
       begin
-        Result := TryStrToInt(string(obj.AsString), i);
+        SValue := string(obj.AsString);
+        if (SValue = '') or (FForceSet and (SValue = '[]') ) then begin
+          i := 0; // [] == "0" ; empty set
+          TValue.Make(@i, ATypeInfo, Value);
+          Result := True;
+          Exit;
+        end;
+        Result := TryStrToInt(SValue, i);
         if Result then begin
           TValue.Make(nil, ATypeInfo, Value);
           TValueData(Value).FAsSLong := i;
+        end else if FForceSet then begin
+          i := SuperStringToSet(ATypeInfo, SValue);
+          if i >= 0 then begin
+            TValue.Make(@i, ATypeInfo, Value);
+            Result := True;
+          end;
         end;
       end;
     else
@@ -9671,7 +9876,9 @@ begin
       Result := jFromChar(ATypeInfo, obj, Value);
     tkInt64:
       Result := jFromInt64(ATypeInfo, obj, Value);
-    tkEnumeration, tkInteger:
+    tkEnumeration:
+      Result := jFromEnumeration(ATypeInfo, obj, Value);
+    tkInteger:
       Result := jFromInt(ATypeInfo, obj, Value);
     tkSet:
       Result := jFromSet(ATypeInfo, obj, Value);
@@ -9996,6 +10203,23 @@ begin
     Result := nil;
 end;
 
+function TSuperRttiContext.jToSet(var Value: TValue; const index: ISuperObject): ISuperObject;
+var
+  LTypeInfo: PTypeInfo;
+  SValue: SOString;
+begin
+  if not FForceSet then begin
+    Result := jToInteger(Value, index);
+    Exit;
+  end;
+  LTypeInfo := Value.TypeInfo;
+  SValue := SOString(SuperSetToString(LTypeInfo, Pointer(Value.GetReferenceToRawData), {Brackets:}True));
+  if FForceDefault or (SValue <> '[]') then
+    Result := TSuperObject.Create(SValue)
+  else
+    Result := nil;
+end;
+
 function TSuperRttiContext.jToEnumeration(var Value: TValue; const index: ISuperObject): ISuperObject;
 var
   LValue, LEnum: string;
@@ -10215,7 +10439,9 @@ begin
       Result := jToInt64(Value, index);
     tkChar:
       Result := jToChar(Value, index);
-    tkSet, tkInteger:
+    tkSet:
+      Result := jToSet(Value, index);
+    tkInteger:
       Result := jToInteger(Value, index);
     tkFloat:
       Result := jToFloat(Value, index);
