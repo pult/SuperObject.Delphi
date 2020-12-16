@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1216.1404
+{ superobject.pas } // version: 2020.1216.2025
 (*
  *                         Super Object Toolkit
  *
@@ -1241,9 +1241,12 @@ type
     function jFromUnknown(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromInterface(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
   public // RWSynchronize
-    procedure BeginRead(Obj: Pointer; var L: TMREWSyncHandle);
+    procedure BeginRead(Obj: Pointer; var L: TMREWSyncHandle); overload;
+    procedure BeginRead<T>(const obj: T; var L: TMREWSyncHandle); overload;
     procedure EndRead(var L: TMREWSyncHandle);
-    procedure BeginWrite(Obj: Pointer; var L: TMREWSyncHandle);
+
+    procedure BeginWrite(Obj: Pointer; var L: TMREWSyncHandle); overload;
+    procedure BeginWrite<T>(const obj: T; var L: TMREWSyncHandle); overload;
     procedure EndWrite(var L: TMREWSyncHandle);
   public
     Context: TRttiContext;
@@ -8798,6 +8801,11 @@ begin
   {$ifend} // declared(TSuperMREWSync)
 end;
 
+procedure TSuperRttiContext.BeginRead<T>(const obj: T; var L: TMREWSyncHandle);
+begin
+  BeginRead(@Obj, L);
+end;
+
 procedure TSuperRttiContext.EndRead(var L: TMREWSyncHandle);
 var
   S: TSuperMREWSync;
@@ -8841,6 +8849,11 @@ begin
     end;
   end;
   {$ifend} // declared(TSuperMREWSync)
+end;
+
+procedure TSuperRttiContext.BeginWrite<T>(const obj: T; var L: TMREWSyncHandle);
+begin
+  BeginWrite(@Obj, L);
 end;
 
 procedure TSuperRttiContext.EndWrite(var L: TMREWSyncHandle);
