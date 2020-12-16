@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1216.1209
+{ superobject.pas } // version: 2020.1216.1404
 (*
  *                         Super Object Toolkit
  *
@@ -1164,6 +1164,27 @@ type
   TSuperDateTimeZoneHandling = (sdzLOCAL, sdzUTC);
   TSuperDateFormatHandling = (sdfJava, sdfISO, sdfUnix, sdfFormatSettings);
 
+  TMREWSyncHandle = type Pointer;
+
+  {$if declared(TMREWSync) and declared(TMonitor)}
+  TSuperMREWSync = class(TMREWSync)
+  private
+    FObj: Pointer; // ref to type <T>
+    FLocks: Integer;
+  public
+    constructor Create(AObj: Pointer);
+
+    procedure BeginRead;
+    function EndRead: Integer; // return Locks
+
+    function BeginWrite: Boolean;
+    function EndWrite: Integer;
+
+    property Obj: Pointer read FObj; // ref to type <T>
+    property Locks: Integer read FLocks; // return Locks
+  end;
+  {$ifend} // declared(TMREWSync)
+
   TSuperRttiContext = class
   protected
     FForceDefault: Boolean;
@@ -1171,6 +1192,10 @@ type
     FForceBaseType: Boolean;
     FForceTypeMap: Boolean;
     FForceSerializer: Boolean; // https://code.google.com/p/superobject/issues/detail?id=64
+    {$if declared(TSuperMREWSync)}
+    FMREWSyncLocks: TObjectDictionary<{Key: @<T>}Pointer, {Value:}TSuperMREWSync>;
+    {$ifend}
+    FRWSynchronize: Boolean;
     // https://github.com/hgourvest/superobject/pull/13/
     class function IsArrayExportable(const aMember: TRttiMember): Boolean;
     class function IsExportable(const aType: TRttiType; const Element: TClassElement): Boolean;
@@ -1200,7 +1225,7 @@ type
     function jToDynArray(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToClassRef(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToInterface(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-   protected // FromJson
+  protected // FromJson
     function jFromChar(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromWideChar(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromInt64(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
@@ -1215,6 +1240,11 @@ type
     function jFromClassRef(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromUnknown(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromInterface(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
+  public // RWSynchronize
+    procedure BeginRead(Obj: Pointer; var L: TMREWSyncHandle);
+    procedure EndRead(var L: TMREWSyncHandle);
+    procedure BeginWrite(Obj: Pointer; var L: TMREWSyncHandle);
+    procedure EndWrite(var L: TMREWSyncHandle);
   public
     Context: TRttiContext;
     SerialFromJson: TDictionary<PTypeInfo, TSerialFromJson>;
@@ -1239,6 +1269,8 @@ type
     property ForceTypeMap: Boolean read FForceTypeMap write FForceTypeMap; // default False;
     property ForceEnumeration: Boolean read FForceEnumeration write FForceEnumeration; // default True;
     property ForceSerializer: Boolean read FForceSerializer write FForceSerializer; // default False;
+    // RWSynchronize - multithreaded protected access to rtti object
+    property RWSynchronize: Boolean read FRWSynchronize write FRWSynchronize; // default False;
   end;
 
   TSuperObjectHelper = class helper for TObject
@@ -8644,6 +8676,50 @@ begin
   FTypeInfo := TypeInfo(T);
 end;
 
+{ TSuperMREWSync }
+{$if declared(TSuperMREWSync)}
+
+constructor TSuperMREWSync.Create(AObj: Pointer);
+begin
+  inherited Create;
+  FObj := AObj;
+end;
+
+procedure TSuperMREWSync.BeginRead;
+begin
+  AtomicIncrement(FLocks);
+  inherited BeginRead;
+end;
+
+function TSuperMREWSync.EndRead: Integer;
+begin
+  if (FLocks > 0) then begin
+    inherited EndRead;
+    Result := AtomicDecrement(FLocks);
+  end else begin
+    Result := 0;
+  end;
+end;
+
+function TSuperMREWSync.BeginWrite: Boolean;
+begin
+  AtomicIncrement(FLocks);
+  Result := inherited BeginWrite;
+  if not Result then
+    AtomicDecrement(FLocks);
+end;
+
+function TSuperMREWSync.EndWrite: Integer;
+begin
+  if (FLocks > 0) then begin
+    inherited EndWrite;
+    Result := AtomicDecrement(FLocks);
+  end else begin
+    Result := 0;
+  end;
+end;
+{$ifend} // declared(TSuperMREWSync)
+
 { TSuperRttiContext }
 
 constructor TSuperRttiContext.Create;
@@ -8655,6 +8731,11 @@ begin
   FForceBaseType := True; // OLD: False
   FForceTypeMap := False;
   FForceSerializer := False;
+
+  FRWSynchronize := False;
+  {$if declared(TSuperMREWSync)}
+  FMREWSyncLocks := TObjectDictionary<{Key: @<T>}Pointer, {Value:}TSuperMREWSync>.Create([doOwnsValues]);
+  {$ifend}
 
   SuperDateTimeZoneHandling := sdzUTC;
   SuperDateFormatHandling := sdfISO; // OLD: sdfJava
@@ -8687,7 +8768,100 @@ begin
   FreeAndNil(SerialFromJson);
   FreeAndNil(SerialToJson);
   Context.Free; // record
+  {$if declared(TSuperMREWSync)}
+  FreeAndNil(FMREWSyncLocks);
+  {$ifend}
   inherited;
+end;
+
+procedure TSuperRttiContext.BeginRead(Obj: Pointer; var L: TMREWSyncHandle);
+var
+  S: TSuperMREWSync;
+begin
+  L := nil;
+  {$if declared(TSuperMREWSync)}
+  if FRWSynchronize then begin
+    TMonitor.Enter(Self);
+    try
+      if FRWSynchronize then begin
+        if not FMREWSyncLocks.TryGetValue(Obj, S) then begin
+          S := TSuperMREWSync.Create(Obj);
+          FMREWSyncLocks.Add(Obj, S);
+        end;
+        L := TMREWSyncHandle(S);
+        S.BeginRead;
+      end;
+    finally
+      TMonitor.Exit(Self);
+    end;
+  end;
+  {$ifend} // declared(TSuperMREWSync)
+end;
+
+procedure TSuperRttiContext.EndRead(var L: TMREWSyncHandle);
+var
+  S: TSuperMREWSync;
+begin
+  {$if declared(TSuperMREWSync)}
+  if Assigned(L) then begin
+    S := TSuperMREWSync(L);
+    if (S.EndRead = 0) then begin
+      TMonitor.Enter(Self);
+      try
+        if (S.Locks = 0) then
+          FMREWSyncLocks.Remove(S.Obj);
+      finally
+        TMonitor.Exit(Self);
+      end;
+    end;
+  end;
+  {$ifend} // declared(TSuperMREWSync)
+  L := nil;
+end;
+
+procedure TSuperRttiContext.BeginWrite(Obj: Pointer; var L: TMREWSyncHandle);
+var
+  S: TSuperMREWSync;
+begin
+  L := nil;
+  {$if declared(TSuperMREWSync)}
+  if FRWSynchronize then begin
+    TMonitor.Enter(Self);
+    try
+      if FRWSynchronize then begin
+        if not FMREWSyncLocks.TryGetValue(Obj, S) then begin
+          S := TSuperMREWSync.Create(Obj);
+          FMREWSyncLocks.Add(Obj, S);
+        end;
+        L := TMREWSyncHandle(S);
+        S.BeginWrite;
+      end;
+    finally
+      TMonitor.Exit(Self);
+    end;
+  end;
+  {$ifend} // declared(TSuperMREWSync)
+end;
+
+procedure TSuperRttiContext.EndWrite(var L: TMREWSyncHandle);
+var
+  S: TSuperMREWSync;
+begin
+  {$if declared(TSuperMREWSync)}
+  if Assigned(L) then begin
+    S := TSuperMREWSync(L);
+    if (S.EndWrite = 0) then begin
+      TMonitor.Enter(Self);
+      try
+        if (S.Locks = 0) then
+          FMREWSyncLocks.Remove(S.Obj);
+      finally
+        TMonitor.Exit(Self);
+      end;
+    end;
+  end;
+  {$ifend} // declared(TSuperMREWSync)
+  L := nil;
 end;
 
 class function TSuperRttiContext.IsArrayExportable(const aMember: TRttiMember): Boolean;
@@ -8801,41 +8975,47 @@ end;
 
 function TSuperRttiContext.AsType<T>(const obj: ISuperObject): T;
 var
+  L: TMREWSyncHandle;
   ret: TValue;
 begin
-  {+} // https://code.google.com/p/superobject/issues/detail?id=53
-  ret:= TValue.Empty;
-  {+.}
-  if FromJson(TypeInfo(T), obj, ret) then begin
-    {$IFDEF FPC}
-    ret.ExtractRawData(@Result);
-    {$ELSE} //@dbg: ret.DataSize == SizeOf(Result)
-    Result := ret.AsType<T>;
-    {$ENDIF}
-  end else
-  {+} // https://code.google.com/p/superobject/issues/detail?id=53
-  begin
-    if ret.Kind = tkClass then
-    {+}
-    {$IFDEF AUTOREFCOUNT}
-      ret := nil;
-    {$ELSE}
-      ret.AsObject.Free;
-    {$ENDIF}
-    {+.}
-    raise ESuperObject.Create('Marshalling error');
+  BeginWrite(@obj, L);
+  try
+    ret:= TValue.Empty; // https://code.google.com/p/superobject/issues/detail?id=53
+    if FromJson(TypeInfo(T), obj, ret) then begin
+      {$IFDEF FPC}
+      ret.ExtractRawData(@Result);
+      {$ELSE} //@dbg: ret.DataSize == SizeOf(Result)
+      Result := ret.AsType<T>;
+      {$ENDIF}
+    end else
+    begin // https://code.google.com/p/superobject/issues/detail?id=53
+      if ret.Kind = tkClass then
+      {$IFDEF AUTOREFCOUNT}
+        ret := nil;
+      {$ELSE}
+        ret.AsObject.Free;
+      {$ENDIF}
+      raise ESuperObject.Create('Marshalling error');
+    end;
+  finally
+    EndWrite(L);
   end;
-  {+.}
 end;
 
 function TSuperRttiContext.AsJson<T>(const obj: T; const index: ISuperObject = nil): ISuperObject;
 var
-  v: TValue;
+  L: TMREWSyncHandle;
+  V: TValue;
 begin
-  TValue.Make(@obj, TypeInfo(T), v);
-  if index <> nil then
-    Result := ToJson(v, index) else
-    Result := ToJson(v, so);
+  BeginRead(@obj, L);
+  try
+    TValue.Make(@obj, TypeInfo(T), V);
+    if index <> nil then
+      Result := ToJson(V, index) else
+      Result := ToJson(V, so);
+  finally
+    EndRead(L);
+  end;
 end;
 
 function TSuperRttiContext.jFromChar(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean;

@@ -176,12 +176,18 @@ begin
 end;
 
 initialization
+  // Sample: RWSynchronize - multithreaded protected access to rtti object when marshaling
+  //SuperRttiContextDefault.RWSynchronize := True;
+
   // Map TCustomDataTime2 into TDateTime
   SuperRttiContextDefault.ForceTypeMap := True; // Allow use attributes +[SOType(TypeInfo(T))] or -[SOTypeMap<T>]
+
   // Map TCustomDataTime to TDateTime
   SuperRegisterCustomTypeInfo(TypeInfo(TCustomDataTime), TypeInfo(TDateTime));
+
   // Map TCustomBoolean into Boolean
   SuperRegisterCustomTypeInfo(TypeInfo(TCustomBoolean), TypeInfo(Boolean));
+
   // Sample: Customize marshaling TCustomBoolean
   SuperRttiContextDefault.SerialFromJson.AddOrSetValue(TypeInfo(TCustomBoolean), UnMarshalCustomBool);
   SuperRttiContextDefault.SerialToJson.AddOrSetValue(TypeInfo(TCustomBoolean), MarshalCustomBool);
