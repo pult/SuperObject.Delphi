@@ -13,9 +13,9 @@ uses
   // system
   {%H-}Types, SysUtils, Variants, Classes,
   DateUtils,
-  // superobjec all:
+  // superobject all:
   //supertypes, supertimezone, superdate, superobject, uMarshalSuper,
-  // superobjec demo:
+  // superobject demo:
   superobject, superdate, uMarshalSuper,
   // LCL:
   Forms, Controls, Graphics, Dialogs, StdCtrls;
@@ -73,4 +73,3 @@ begin
 end;
 
 end.
-

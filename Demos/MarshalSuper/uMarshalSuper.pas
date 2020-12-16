@@ -90,7 +90,7 @@ begin
     end;
     try
       obj    := ctx.AsJson<T>(Data);
-      Result := string(obj.AsJSon);
+      Result := string(obj.AsJSon( {indent:}True, {escape:}False ));
       //Result := string( ISuperObject( ctx.AsJson<T>(Data) ).AsJSon);
     except
       on e: Exception do
@@ -152,14 +152,14 @@ begin
   SuperDateTimeZoneHandling := sdzUTC;
   SuperDateFormatHandling := sdfISO; // OLD: sdfJava
 
-  SerialFromJson.Items[TypeInfo(TDateTime)] := SerialFromDateTime;
-  SerialToJson.Items[TypeInfo(TDateTime)] := SerialToDateTime;
+  SerialFromJson.AddOrSetValue(TypeInfo(TDateTime), SerialFromDateTime);
+  SerialToJson.AddOrSetValue(TypeInfo(TDateTime), SerialToDateTime);
 end;
 
 initialization
-  {$if declared(SuperRttiContextClassDefault)} // optional: default json marshaling class
-  SuperRttiContextClassDefault := TSerialContext;
-  {$ifend}
+//  {$if declared(SuperRttiContextClassDefault)}
+//  SuperRttiContextClassDefault := TSerialContext; // optional: default json marshaling
+//  {$ifend}
 
   {$if declared(SuperRttiContextDefault)} // optional: default json global marshaling object
   SuperRttiContextDefault.Free;
