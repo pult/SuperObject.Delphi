@@ -1,4 +1,4 @@
-{ superdate.pas } // version: 2020.1214.2217
+{ superdate.pas } // version: 2020.1216.2117
 unit superdate;
 
 interface
@@ -76,6 +76,8 @@ interface
 {$IFNDEF FPC}{$IFDEF UNICODE}
   {$HIGHCHARUNICODE ON}  {make all #nn char constants Wide for better portability}
 {$ENDIF}{$ENDIF}
+
+{$UNDEF SQLTIMESTAMP}
 {+.}
 
 uses
@@ -103,6 +105,13 @@ uses
   ,System.TimeSpan
       {$ENDIF}
     {$ENDIF !MSWINDOWS}
+
+    {$IFNDEF FPC}
+    {$if not declared(TTimeZone)}
+  ,SqlTimSt {$DEFINE SQLTIMESTAMP}
+    {$ifend}
+    {$ENDIF !FPC}
+
   {$ENDIF !SUPERTIMEZONE}
   ;
 
@@ -134,6 +143,20 @@ function DelphiDateTimeToUnix(const AValue: TDateTime; AInputIsUTC: Boolean = Tr
 function UnixToDelphiDateTime(const AValue: Int64; AReturnUTC: Boolean): TDateTime;
 
 implementation
+
+{$IFDEF SQLTIMESTAMP}
+var
+  FTZInfo: TTimeZone;
+  FTZInfoInitialized: Boolean;
+
+procedure InitTZInfo;
+begin
+  if not FTZInfoInitialized then begin
+    FTZInfo := TTimeZone.GetTimeZone;
+    FTZInfoInitialized := True;
+  end;
+end;
+{$ENDIF SQLTIMESTAMP}
 
 {$IFDEF SUPERTIMEZONE}
 {+.}
@@ -1259,20 +1282,33 @@ const
 var
   y, mo, d, h, mi, se, ms: Word;
   Bias: Integer;
+  {$IFNDEF SQLTIMESTAMP}
+  {$if declared(TTimeZone)}
   TimeZone: TTimeZone;
+  {$ifend}
+  {$ENDIF !SQLTIMESTAMP}
 begin
   DecodeDate(ADate, y, mo, d);
   DecodeTime(ADate, h, mi, se, ms);
   Result := Format(SDateFormat, [y, mo, d, h, mi, se, ms]);
   if not AInputIsUTC then
   begin
+    {$if declared(TTimeZone)}
+    {$IFDEF SQLTIMESTAMP}
+    InitTZInfo;
+    Bias := FTzInfo.FInfo.Bias;
+    {$ELSE !SQLTIMESTAMP}
     TimeZone := TTimeZone.Local;
     {$hints off} // Hint: H2443 Inline function 'TTimeZone.GetUtcOffset' has not been expanded because unit 'System.TimeSpan' is not specified in USES list
     Bias := Trunc(TimeZone.GetUTCOffset(ADate).Negate.TotalMinutes);
+    {$ENDIF !SQLTIMESTAMP}
+    {$else}
+?   Bias := 0;
+    {$ifend}
     if Bias <> 0 then
     begin
       // Remove the Z, in order to add the UTC_Offset to the string.
-      SetLength(Result, Result.Length - 1);
+      SetLength(Result, Length(Result) - 1);
       Result := Format(SOffsetFormat, [Result, Neg[Bias > 0], Abs(Bias) div MinsPerHour,
         Abs(Bias) mod MinsPerHour]);
     end
@@ -1298,6 +1334,9 @@ var
   {$IFDEF SUPERTIMEZONE}
   LTimeZone: TSuperTimeZone;
   {$ENDIF}
+  {$IFDEF SQLTIMESTAMP}
+  LValue: TSQLTimeStamp;
+  {$ENDIF SQLTIMESTAMP}
 {$ENDIF USE_ISO8601ToDate}
 begin
   {$IFDEF USE_ISO8601ToDate}
@@ -1317,7 +1356,13 @@ begin
       Value := JavaToDelphiDateTime(jdt);
       if AReturnUTC then begin
         {$if declared(TTimeZone)}
+        {$IFDEF SQLTIMESTAMP}
+        InitTZInfo;
+        LValue := DateTimeToSQLTimeStamp(Value);
+        Value := SQLTimeStampToDateTime(LocalToUTC(FTzInfo, LValue));
+        {$ELSE !SQLTIMESTAMP}
         Value := TTimeZone.Local.ToUniversalTime(Value);
+        {$ENDIF !SQLTIMESTAMP}
         {$else}
         Value := LocalTimeToUniversal(Value);
         {$ifend}
@@ -1329,21 +1374,30 @@ end;
 
 function DelphiDateTimeToUnix(const AValue: TDateTime; AInputIsUTC: Boolean = True): Int64;
 {$if defined(FPC) or (CompilerVersion >= 30.00)}{$else}
-var
-  LDate : TDateTime;
+var LDate : TDateTime;
 {$ifend}
+{$IFDEF SQLTIMESTAMP}
+var LValue: TSQLTimeStamp;
+{$ENDIF SQLTIMESTAMP}
 begin
   {$if defined(FPC) or (CompilerVersion >= 30.00)}
   Result := DateTimeToUnix(AValue, AInputIsUTC);
   {$else}
   if AInputIsUTC then
     LDate := AValue
-  else
+  else begin
     {$if declared(TTimeZone)}
+    {$IFDEF SQLTIMESTAMP}
+    InitTZInfo;
+    LValue := DateTimeToSQLTimeStamp(AValue);
+    LDate := SQLTimeStampToDateTime(UTCToLocal(FTzInfo, LValue));
+    {$ELSE !SQLTIMESTAMP}
     LDate := TTimeZone.Local.ToUniversalTime(AValue);
+    {$ENDIF !SQLTIMESTAMP}
     {$else}
     LDate := LocalTimeToUniversal(AValue);
     {$ifend}
+  end;
   Result := SecondsBetween(UnixDateDelta, LDate);
   if LDate < UnixDateDelta then
      Result := -Result;
@@ -1351,6 +1405,9 @@ begin
 end;
 
 function UnixToDelphiDateTime(const AValue: Int64; AReturnUTC: Boolean): TDateTime;
+{$IFDEF SQLTIMESTAMP}
+var LValue: TSQLTimeStamp;
+{$ENDIF SQLTIMESTAMP}
 begin
   {$if defined(FPC) or (CompilerVersion >= 30.00)}
   Result := UnixToDateTime(AValue, AReturnUTC);
@@ -1359,7 +1416,13 @@ begin
     Result := IncSecond(UnixDateDelta, AValue)
   else begin
     {$if declared(TTimeZone)}
+    {$IFDEF SQLTIMESTAMP}
+    InitTZInfo;
+    LValue := DateTimeToSQLTimeStamp(IncSecond(UnixDateDelta, AValue));
+    Result := SQLTimeStampToDateTime(UTCToLocal(FTzInfo, LValue));
+    {$ELSE !SQLTIMESTAMP}
     Result := TTimeZone.Local.ToLocalTime(IncSecond(UnixDateDelta, AValue));
+    {$ENDIF !SQLTIMESTAMP}
     {$else}
     Result := UniversalTimeToLocal(AValue);
     {$ifend}
