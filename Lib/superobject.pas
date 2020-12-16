@@ -1198,7 +1198,7 @@ type
     constructor Create; virtual;
     destructor Destroy; override;
 
-    function FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
+    function FromJson(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function ToJson(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function AsType<T>(const obj: ISuperObject): T;
     function AsJson<T>(const obj: T; const index: ISuperObject = nil): ISuperObject;
@@ -1214,7 +1214,7 @@ type
     constructor FromJson(const obj: ISuperObject; ctx: TSuperRttiContext = nil); overload;
     constructor FromJson(const str: string; ctx: TSuperRttiContext = nil); overload;
   end;
-{$ENDIF}
+{$ENDIF HAVE_RTTI}
 
   TSuperObjectIter = record
     key: SOString;
@@ -1280,11 +1280,11 @@ function SOInvoke(const obj: TValue; const method: string; const params: ISuperO
 function SOInvoke(const obj: TValue; const method: string; const params: string; ctx: TSuperRttiContext = nil): ISuperObject; overload;
 
 {+} // https://code.google.com/p/superobject/issues/detail?id=39
-function IsGenericType(TypeInfo: PTypeInfo): Boolean;
-function GetDeclaredGenericType({%H-}RttiContext: TRttiContext; {%H-}TypeInfo: PTypeInfo): TRttiType;
-function IsList(RttiContext: TRttiContext; TypeInfo: PTypeInfo): Boolean;
+function IsGenericType(ATypeInfo: PTypeInfo): Boolean;
+function GetDeclaredGenericType({%H-}RttiContext: TRttiContext; {%H-}ATypeInfo: PTypeInfo): TRttiType;
+function IsList(RttiContext: TRttiContext; ATypeInfo: PTypeInfo): Boolean;
 {+.}
-{$ENDIF}
+{$ENDIF HAVE_RTTI}
 
 {+}
 {$IFDEF EXTEND_FORIN}
@@ -2655,24 +2655,24 @@ begin
 end;
 
 {+} // https://code.google.com/p/superobject/issues/detail?id=39
-function IsGenericType(TypeInfo: PTypeInfo): Boolean;
+function IsGenericType(ATypeInfo: PTypeInfo): Boolean;
 {+}
 var
   vTypeName: string;
 begin
-  Result := Assigned(TypeInfo);
+  Result := Assigned(ATypeInfo);
   if not Result then
     Exit;
   {$IFDEF NEXTGEN}
-  vTypeName := TypeInfo.NameFld.ToString;
+  vTypeName := ATypeInfo.NameFld.ToString;
   {$ELSE}
-  vTypeName := String(TypeInfo.Name);
+  vTypeName := String(ATypeInfo.Name);
   {$ENDIF}
   Result := Pos('<', vTypeName) > 0;
 {+.}
 end;
 //
-function GetDeclaredGenericType(RttiContext: TRttiContext; TypeInfo: PTypeInfo): TRttiType;
+function GetDeclaredGenericType(RttiContext: TRttiContext; ATypeInfo: PTypeInfo): TRttiType;
 {$IFNDEF FPC}
 var
   startPos,
@@ -2685,10 +2685,12 @@ begin
     Exit;
   {$ELSE !FPC}
   {+}
+  //if ATypeInfo = nil then
+  //  Exit;
   {$IFDEF NEXTGEN}
-  vTypeName := TypeInfo.NameFld.ToString;
+  vTypeName := ATypeInfo.NameFld.ToString;
   {$ELSE}
-  vTypeName := string(TypeInfo.Name);
+  vTypeName := string(ATypeInfo.Name);
   {$ENDIF}
   startPos := AnsiPos('<', vTypeName);
   if startPos > 0 then
@@ -2704,15 +2706,17 @@ begin
   {$ENDIF !FPC}
 end;
 //
-function IsList(RttiContext: TRttiContext; TypeInfo: PTypeInfo): Boolean;
+function IsList(RttiContext: TRttiContext; ATypeInfo: PTypeInfo): Boolean;
 var
-  method: TRttiMethod;
+  AMethod: TRttiMethod;
 begin
-  method := RttiContext.GetType(TypeInfo).GetMethod('Add');
+  //if (ATypeInfo = nil) or (RttiContext = nil) then
+  //  Exit;
+  AMethod := RttiContext.GetType(ATypeInfo).GetMethod('Add');
 
-  Result := (method <> nil) and
-            (method.MethodKind = mkFunction) and
-            (Length(method.GetParameters) = 1)
+  Result := (AMethod <> nil) and
+            (AMethod.MethodKind = mkFunction) and
+            (Length(AMethod.GetParameters) = 1)
 end;
 {+.}
 
@@ -8720,7 +8724,7 @@ begin
   if FromJson(TypeInfo(T), obj, ret) then begin
     {$IFDEF FPC}
     ret.ExtractRawData(@Result);
-    {$ELSE}
+    {$ELSE} //@dbg: ret.DataSize == SizeOf(Result)
     Result := ret.AsType<T>;
     {$ENDIF}
   end else
@@ -8749,7 +8753,7 @@ begin
     Result := ToJson(v, so);
 end;
 
-function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject;
+function TSuperRttiContext.FromJson(ATypeInfo: PTypeInfo; const obj: ISuperObject;
   var Value: TValue): Boolean;
 
   procedure FromChar();
@@ -8783,7 +8787,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
     case ObjectGetType(obj) of
     stInt:
       begin
-        TValue.Make(nil, TypeInfo, Value);
+        TValue.Make(nil, ATypeInfo, Value);
         TValueData(Value).FAsSInt64 := obj.AsInteger;
         Result := True;
       end;
@@ -8791,7 +8795,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
       begin
         if TryStrToInt64(string(obj.AsString), i) then
         begin
-          TValue.Make(nil, TypeInfo, Value);
+          TValue.Make(nil, ATypeInfo, Value);
           TValueData(Value).FAsSInt64 := i;
           Result := True;
         end else
@@ -8812,12 +8816,12 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
     stInt, stBoolean:
       begin
         i := obj.AsInteger;
-        TypeData := GetTypeData(TypeInfo);
+        TypeData := GetTypeData(ATypeInfo);
         if TypeData.MaxValue > TypeData.MinValue then
           Result := (i >= TypeData.MinValue) and (i <= TypeData.MaxValue) else
           Result := (i >= TypeData.MinValue) and (i <= Int64(PCardinal(@TypeData.MaxValue)^));
         if Result then
-          TValue.Make(@i, TypeInfo, Value);
+          TValue.Make(@i, ATypeInfo, Value);
       end;
     stString:
       begin
@@ -8838,7 +8842,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
     case ObjectGetType(obj) of
     stInt:
       begin
-        TValue.Make(nil, TypeInfo, Value);
+        TValue.Make(nil, ATypeInfo, Value);
         TValueData(Value).FAsSLong := obj.AsInteger;
         Result := True;
       end;
@@ -8846,7 +8850,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
       begin
         if TryStrToInt(string(obj.AsString), i) then
         begin
-          TValue.Make(nil, TypeInfo, Value);
+          TValue.Make(nil, ATypeInfo, Value);
           TValueData(Value).FAsSLong := i;
           Result := True;
         end else
@@ -8864,8 +8868,8 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
     case ObjectGetType(obj) of
     stInt, stDouble, stCurrency:
       begin
-        TValue.Make(nil, TypeInfo, Value);
-        case GetTypeData(TypeInfo).FloatType of
+        TValue.Make(nil, ATypeInfo, Value);
+        case GetTypeData(ATypeInfo).FloatType of
           ftSingle: TValueData(Value).FAsSingle := obj.AsDouble;
           ftDouble: TValueData(Value).FAsDouble := obj.AsDouble;
           ftExtended: TValueData(Value).FAsExtended := obj.AsDouble;
@@ -8929,7 +8933,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
         begin
           Result := True;
           if Value.Kind <> tkClass then
-            Value := GetTypeData(TypeInfo).ClassType.Create;
+            Value := GetTypeData(ATypeInfo).ClassType.Create;
           {$IFNDEF FPC} // FPC: Currently not supported rtti for Fields
           {+} // https://code.google.com/p/superobject/issues/detail?id=16
           {$IFDEF USE_REFLECTION}
@@ -8981,12 +8985,12 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
         begin
           Result := False;
 
-          if IsList(Context, TypeInfo) and IsGenericType(TypeInfo) then
+          if IsList(Context, ATypeInfo) and IsGenericType(ATypeInfo) then
           begin
             Result := True;
 
             if Value.Kind <> tkClass then
-              Value := GetTypeData(TypeInfo).ClassType.Create;
+              Value := GetTypeData(ATypeInfo).ClassType.Create;
 
             AMethod := Context.GetType(Value.AsObject.ClassType).GetMethod('Add');
 
@@ -8995,7 +8999,7 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
             begin
               v := TValue.Empty;
 
-              Result := FromJson(GetDeclaredGenericType(Context, TypeInfo).Handle, vArray[i], v);
+              Result := FromJson(GetDeclaredGenericType(Context, ATypeInfo).Handle, vArray[i], v);
 
               if Result then
                 AMethod.Invoke(Value.AsObject, [v])
@@ -9020,43 +9024,43 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
   {$IFNDEF FPC} // FPC: Currently not supported rtti for Fields
   procedure FromRecord();
   var
-    f: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
-    p: Pointer;
-    v: TValue;
+    LRttiField: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
+    pValue: Pointer;
+    LValue: TValue;
     fieldObj: ISuperObject;
   begin
     Result := True;
-    TValue.Make(nil, TypeInfo, Value);
-    for f in Context.GetType(TypeInfo).GetFields do
+    TValue.Make(nil, ATypeInfo, Value);
+    for LRttiField in Context.GetType(ATypeInfo).GetFields do
     begin
-      if ObjectIsType(obj, stObject) and (f.FieldType <> nil) then
+      if ObjectIsType(obj, stObject) and (LRttiField.FieldType <> nil) then
       begin
         {$IFDEF VER210}
-        p := IValueData(TValueData(Value).FHeapData).GetReferenceToRawData;
+        pValue := IValueData(TValueData(Value).FHeapData).GetReferenceToRawData;
         {$ELSE}
-        p := TValueData(Value).FValueData.GetReferenceToRawData;
+        pValue := TValueData(Value).FValueData.GetReferenceToRawData;
         {$ENDIF}
         {+} // https://code.google.com/p/superobject/issues/detail?id=40
         {
-        Result := FromJson(f.FieldType.Handle, GetObjectDefault(f, obj.AsObject[GetObjectName(f)]), v);
+        Result := FromJson(LRttiField.FieldType.Handle, GetObjectDefault(f, obj.AsObject[GetObjectName(LRttiField)]), LValue);
         if Result then
-          f.SetValue(p, v)
+          LRttiField.SetValue(pValue, LValue)
         else
         begin
-          //Writeln(f.Name);
+          //Writeln(LRttiField.Name);
           Exit;
         end;
         }
-        fieldObj := obj.AsObject[GetObjectName(f)];
-        fieldObj := GetObjectDefault(f, fieldObj);
-        if FromJson(f.FieldType.Handle, fieldObj, v) then
-          f.SetValue(p, v);
+        fieldObj := obj.AsObject[GetObjectName(LRttiField)];
+        fieldObj := GetObjectDefault(LRttiField, fieldObj);
+        if FromJson(LRttiField.FieldType.Handle, fieldObj, LValue) then
+          LRttiField.SetValue(pValue, LValue);
         {?// https://github.com/hgourvest/superobject/pull/19/
-        fieldObj := obj.AsObject[GetObjectName(f)];
+        fieldObj := obj.AsObject[GetObjectName(LRttiField)];
         if Assigned(fieldObj) then // ATRLP: 20160708: optional (no value in JSON) fields are allowed
         begin
-          if FromJson(f.FieldType.Handle, GetObjectDefault(f, fieldObj), v) then
-            f.SetValue(p, v);
+          if FromJson(LRttiField.FieldType.Handle, GetObjectDefault(LRttiField, fieldObj), LValue) then
+            LRttiField.SetValue(pValue, LValue);
         end;}
         fieldObj := nil;
         {+.}
@@ -9085,9 +9089,9 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
       begin
         i := obj.AsArray.Length;
         p := nil;
-        DynArraySetLength(p, TypeInfo, 1, @i);
+        DynArraySetLength(p, ATypeInfo, 1, @i);
         pb := p;
-        typ := GetTypeData(TypeInfo);
+        typ := GetTypeData(ATypeInfo);
         {$IFDEF FPC}
         if typ.elTypeRef <> nil then
           el := typ.elTypeRef^ else
@@ -9110,28 +9114,28 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
         end;
         if Result then begin
           {$IFDEF FPC}
-          TValue.Make(@p, TypeInfo, Value);
+          TValue.Make(@p, ATypeInfo, Value);
           {$ELSE}
-          TValue.MakeWithoutCopy(@p, TypeInfo, Value);
+          TValue.MakeWithoutCopy(@p, ATypeInfo, Value);
           {$ENDIF}
         end else
-          DynArrayClear(p, TypeInfo);
+          DynArrayClear(p, ATypeInfo);
       end;
     stNull:
       begin
         {$IFDEF FPC}
         TValue.Make(nil, TypeInfo, Value);
         {$ELSE}
-        TValue.MakeWithoutCopy(nil, TypeInfo, Value);
+        TValue.MakeWithoutCopy(nil, ATypeInfo, Value);
         {$ENDIF}
         Result := True;
       end;
     else
       i := 1;
       p := nil;
-      DynArraySetLength(p, TypeInfo, 1, @i);
+      DynArraySetLength(p, ATypeInfo, 1, @i);
       pb := p;
-      typ := GetTypeData(TypeInfo);
+      typ := GetTypeData(ATypeInfo);
       {$IFDEF FPC}
       if typ.elTypeRef <> nil then
         el := typ.elTypeRef^ else
@@ -9150,10 +9154,10 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
         {$IFDEF FPC}
         TValue.Make(@p, TypeInfo, Value);
         {$ELSE !FPC}
-        TValue.MakeWithoutCopy(@p, TypeInfo, Value);
+        TValue.MakeWithoutCopy(@p, ATypeInfo, Value);
         {$ENDIF !FPC}
       end else
-        DynArrayClear(p, TypeInfo);
+        DynArrayClear(p, ATypeInfo);
     end;
   end;
 
@@ -9234,8 +9238,8 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
     i: Integer;
     v: TValue;
   begin
-    TValue.Make(nil, TypeInfo, Value);
-    ArrayData := @GetTypeData(TypeInfo).ArrayData;
+    TValue.Make(nil, ATypeInfo, Value);
+    ArrayData := @GetTypeData(ATypeInfo).ArrayData;
     idx := 0;
     if ArrayData.DimCount = 1 then
     begin
@@ -9326,18 +9330,18 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
   begin
     {+}
     {$IF defined(FPC) or (CompilerVersion >= 33.00)}  // DX 10.3 Rio Up
-    AGuid := GetTypeData(TypeInfo).Guid;
+    AGuid := GetTypeData(ATypeInfo).Guid;
     if CompareMem(@AGuid, @soGUID, SizeOf(TGUID)) then
     {$ELSE}
-    if CompareMem(@GetTypeData(TypeInfo).Guid, @soGUID, SizeOf(TGUID)) then
+    if CompareMem(@GetTypeData(ATypeInfo).Guid, @soGUID, SizeOf(TGUID)) then
     {$IFEND}
     {+.}
     begin
       if obj <> nil then
-        TValue.Make(@obj, TypeInfo, Value) else
+        TValue.Make(@obj, ATypeInfo, Value) else
         begin
           o := TSuperObject.Create(stNull);
-          TValue.Make(@o, TypeInfo, Value);
+          TValue.Make(@o, ATypeInfo, Value);
         end;
       Result := True;
     end else
@@ -9346,10 +9350,10 @@ function TSuperRttiContext.FromJson(TypeInfo: PTypeInfo; const obj: ISuperObject
 var
   Serial: TSerialFromJson;
 begin
-  if TypeInfo <> nil then
+  if ATypeInfo <> nil then
   begin
-    if not SerialFromJson.TryGetValue(TypeInfo, Serial) then
-      case TypeInfo.Kind of
+    if not SerialFromJson.TryGetValue(ATypeInfo, Serial) then
+      case ATypeInfo.Kind of
         tkChar: FromChar();
         tkInt64: FromInt64();
         tkEnumeration, tkInteger: FromInt(obj);
@@ -9377,7 +9381,7 @@ begin
         FromUnknown()
       end else
       begin
-        TValue.Make(nil, TypeInfo, Value);
+        TValue.Make(nil, ATypeInfo, Value);
         Result := Serial(Self, obj, Value);
         if Value.IsObject then
           FromClass();
@@ -9919,7 +9923,6 @@ end;
 {$ENDIF HAVE_RTTI}
 
 initialization
-  {+}
   {$IFDEF MSWINDOWS}
   SYS_ACP := GetACP();
   SYS_CP_OEM := GetOEMCP();
@@ -9940,7 +9943,6 @@ initialization
   SuperRttiContextClassDefault := TSuperRttiContext;
   SuperRttiContextDefault := SuperRttiContextClassDefault.Create;
   {$ENDIF HAVE_RTTI}
-  {+.}
 finalization
   {$IFDEF HAVE_RTTI}
   SuperRttiContextDefault.Free;
