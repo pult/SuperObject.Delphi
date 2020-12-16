@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1215.2317
+{ superobject.pas } // version: 2020.1216.0200
 (*
  *                         Super Object Toolkit
  *
@@ -241,7 +241,7 @@ uses
   ;
 
 const
-  SuperObjectVersion = 20201215;
+  SuperObjectVersion = 20201216;
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
   {$EXTERNALSYM SuperObjectVerInfo}
@@ -253,7 +253,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 20201215}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 20201216}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -9692,27 +9692,29 @@ end;
 function TSuperRttiContext.jToRecord(const Value: TValue; const index: ISuperObject): ISuperObject;
 {$IFNDEF FPC} // FPC rtti currently not supported TRttiType.GetFields
 var
-  f: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
-  v: TValue;
+  LField: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
+  LValue: TValue;
+  LObject: ISuperObject;
 {$ENDIF !FPC}
 begin
-  Result := TSuperObject.Create(stObject);
   {$IFDEF FPC} // FPC rtti currently not supported TRttiType.GetFields
-  //-Result := nil;
+  Result := nil;
   {$ELSE}
-  for f in Context.GetType(Value.TypeInfo).GetFields do
-  begin
+  Result := TSuperObject.Create(stObject);
+  for LField in Context.GetType(Value.TypeInfo).GetFields do begin
     {$IFDEF USE_REFLECTION}
-    //-if (f.GetCustomAttribute<SOIgnore> = nil) then
-    if (not IsIgnoredObject(f)) then // https://github.com/hgourvest/superobject/pull/13
+    //-if (LField.GetCustomAttribute<SOIgnore> = nil) then
+    if (not IsIgnoredObject(LField)) then // https://github.com/hgourvest/superobject/pull/13
     {$ENDIF USE_REFLECTION}
     begin
       {$IFDEF VER210}
-      v := f.GetValue(IValueData(TValueData(Value).FHeapData).GetReferenceToRawData);
+      LValue := f.GetValue(IValueData(TValueData(Value).FHeapData).GetReferenceToRawData);
       {$ELSE}
-      v := f.GetValue(TValueData(Value).FValueData.GetReferenceToRawData);
+      LValue := LField.GetValue(TValueData(Value).FValueData.GetReferenceToRawData);
       {$ENDIF}
-      Result.AsObject[GetObjectName(f)] := ToJson(v, index);
+      LObject := ToJson(LValue, Index);
+      if Assigned(LObject) then
+        Result.AsObject[GetObjectName(LField)] := LObject;
     end;
   end;
   {$ENDIF !FPC}
