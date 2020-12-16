@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1216.1017
+{ superobject.pas } // version: 2020.1216.1107
 (*
  *                         Super Object Toolkit
  *
@@ -9054,6 +9054,7 @@ function TSuperRttiContext.FromJson(ATypeInfo: PTypeInfo; const obj: ISuperObjec
           if PropertiesVisibility <> [] then
           for LRttiProp in Context.GetType(Value.AsObject.ClassType).GetProperties do
             if (LRttiProp.PropertyType <> nil) and (LRttiProp.Visibility in PropertiesVisibility)
+            and (LRttiProp.IsWritable)
             and (LRttiProp.GetCustomAttribute<SOIgnore> = nil) then
             begin
               LValObj := obj.AsObject[SOString(GetPropertyName(LRttiProp))];
@@ -9738,6 +9739,7 @@ begin
     begin
       for LProp in t.GetProperties do begin
         if (LProp.PropertyType <> nil) and (LProp.Visibility in PropertiesVisibility)
+          and (LProp.IsReadable)
           //-and (LProp.GetCustomAttribute<SOIgnore> = nil)
           and (not IsIgnoredObject(LProp)) // https://github.com/hgourvest/superobject/pull/13
           and (not isIgnoredName(t, LProp))
