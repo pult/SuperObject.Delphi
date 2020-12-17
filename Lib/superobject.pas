@@ -1797,9 +1797,12 @@ end;
 
 function TryObjectToDate(const obj: ISuperObject; var dt: TDateTime): Boolean;
 var
+  typ: TSuperType;
   i: Int64;
+  SValue: SOString;
 begin
-  case ObjectGetType(obj) of
+  typ := ObjectGetType(obj);
+  case typ of
   stInt:
     begin
       dt := JavaToDelphiDateTime(obj.AsInteger);
@@ -1807,9 +1810,10 @@ begin
     end;
   stString:
     begin
+      SValue := obj.AsString;
       {$hints off}//FPC: Hint: Local variable "*" does not seem to be initialized
       {$warnings off}//FPC: Warning: Implicit string type conversion with potential data loss from "UnicodeString" to "AnsiString"
-      if ISO8601DateToJavaDateTime(obj.AsString, i) then
+      if ISO8601DateToJavaDateTime(SValue, i) then
       {$warnings on}
       {$hints on}
       begin
@@ -1817,7 +1821,7 @@ begin
         Result := True;
       end else
         {$warnings off}
-        Result := TryStrToDateTime(obj.AsString, dt);
+        Result := TryStrToDateTime(SValue, dt);
         {$warnings on}
     end;
   else
@@ -4544,14 +4548,14 @@ label
 
 begin
   Result := nil;
-  {+}
-  {$IFNDEF FPC}{$IFNDEF UNICODE}{$IF CompilerVersion > 15.00} // Delphi 2006, 2007
+  {+}  // D7..2006..2007
+  {$IFNDEF FPC}{$IFNDEF UNICODE}{$IF (CompilerVersion > 15.00) and (CompilerVersion <= 18.50)}
   if Assigned(Result) then
   asm
     mov Result, 0 // remove compiler warning (old dcc32 ansi version)
   end;
   {$IFEND}{$ENDIF}{$ENDIF}
-  {+.}
+  {+.}//*)
 
   evalstack := 0;
   obj := nil;
@@ -4564,9 +4568,9 @@ begin
     if (tok.char_offset = len) then
     begin
       if (tok.depth = 0) and (TokRec^.state = tsEatws) and
-         (TokRec^.saved_state = tsFinish) then
-        tok.err := teSuccess else
-        tok.err := teContinue;
+         (TokRec^.saved_state = tsFinish)
+      then tok.err := teSuccess
+      else tok.err := teContinue;
       goto out;
     end;
 
@@ -4580,8 +4584,10 @@ begin
       end;
     #9: inc(tok.col, 4);
     else
-      inc(tok.col);
-    end;
+      begin
+        inc(tok.col);
+      end;
+    end; // case
 
 redo_char:
     case TokRec^.state of
@@ -4593,7 +4599,7 @@ redo_char:
           IsCharInSpaces(v)
           {$ELSE}
           (AnsiChar(v) in spaces)
-          {$ENDIF}
+          {$ENDIF !NEXTGEN}
           {+.}
         then
           {nop}
@@ -4606,89 +4612,93 @@ redo_char:
           TokRec^.state := TokRec^.saved_state;
           goto redo_char;
         end
-      end;
+      end; // tsEatws
 
     tsStart:
-      case v of
-      '"',
-      '''':
-        begin
-          TokRec^.state := tsString;
-          tok.pb.Reset;
-          tok.quote_char := v;
-        end;
-      '-':
-        begin
-          TokRec^.state := tsNumber;
-          tok.pb.Reset;
-          tok.is_double := 0;
-          tok.floatcount := -1;
-          goto redo_char;
-        end;
+      begin
+        case v of
+        '"',
+        '''':
+          begin
+            TokRec^.state := tsString;
+            tok.pb.Reset;
+            tok.quote_char := v;
+          end;
+        '-':
+          begin
+            TokRec^.state := tsNumber;
+            tok.pb.Reset;
+            tok.is_double := 0;
+            tok.floatcount := -1;
+            goto redo_char;
+          end;
 
-      '0'..'9':
-        begin
-          if (tok.depth = 0) then begin
-            {%H-}case ObjectGetType(athis) of
-            stObject:
-              begin
-                TokRec^.state := tsIdentifier;
-                TokRec^.current := athis;
-                goto redo_char;
+        '0'..'9':
+          begin
+            if (tok.depth = 0) then begin
+              {%H-}case ObjectGetType(athis) of
+              stObject:
+                begin
+                  TokRec^.state := tsIdentifier;
+                  TokRec^.current := athis;
+                  goto redo_char;
+                end;
               end;
             end;
+            TokRec^.state := tsNumber;
+            tok.pb.Reset;
+            tok.is_double := 0;
+            tok.floatcount := -1;
+            goto redo_char;
           end;
-          TokRec^.state := tsNumber;
-          tok.pb.Reset;
-          tok.is_double := 0;
-          tok.floatcount := -1;
-          goto redo_char;
-        end;
-      '{':
-        begin
-          TokRec^.state := tsEatws;
-          TokRec^.saved_state := tsObjectFieldStart;
-          TokRec^.current := TSuperObject.Create(stObject);
-        end;
-      '[':
-        begin
-          TokRec^.state := tsEatws;
-          TokRec^.saved_state := tsArray;
-          TokRec^.current := TSuperObject.Create(stArray);
-        end;
-{$IFDEF SUPER_METHOD}
-      '(':
-        begin
-          if (tok.depth = 0) and ObjectIsType(athis, stMethod) then
+        '{':
           begin
-            TokRec^.current := athis;
-            TokRec^.state := tsParamValue;
+            TokRec^.state := tsEatws;
+            TokRec^.saved_state := tsObjectFieldStart;
+            TokRec^.current := TSuperObject.Create(stObject);
           end;
-        end;
-{$ENDIF}
-      'N',
-      'n':
-        begin
-          TokRec^.state := tsNull;
-          tok.pb.Reset;
-          tok.st_pos := 0;
-          goto redo_char;
-        end;
-      'T',
-      't',
-      'F',
-      'f':
-        begin
-          TokRec^.state := tsBoolean;
-          tok.pb.Reset;
-          tok.st_pos := 0;
-          goto redo_char;
-        end;
-      else
-        TokRec^.state := tsIdentifier;
-        tok.pb.Reset;
-        goto redo_char;
-      end;
+        '[':
+          begin
+            TokRec^.state := tsEatws;
+            TokRec^.saved_state := tsArray;
+            TokRec^.current := TSuperObject.Create(stArray);
+          end;
+        {$IFDEF SUPER_METHOD}
+        '(':
+          begin
+            if (tok.depth = 0) and ObjectIsType(athis, stMethod) then
+            begin
+              TokRec^.current := athis;
+              TokRec^.state := tsParamValue;
+            end;
+          end;
+        {$ENDIF SUPER_METHOD}
+        'N',
+        'n':
+          begin
+            TokRec^.state := tsNull;
+            tok.pb.Reset;
+            tok.st_pos := 0;
+            goto redo_char;
+          end;
+        'T',
+        't',
+        'F',
+        'f':
+          begin
+            TokRec^.state := tsBoolean;
+            tok.pb.Reset;
+            tok.st_pos := 0;
+            goto redo_char;
+          end;
+        else
+          begin
+            TokRec^.state := tsIdentifier;
+            tok.pb.Reset;
+            goto redo_char;
+          end;
+        end; // case
+      end; // tsStart
 
     tsFinish:
       begin
@@ -4711,7 +4721,7 @@ redo_char:
             (IsCharInDiapasone(v, 'a','z') or IsCharInDiapasone(v, 'A','Z') or (v='.') or (v='_'))
             {$ELSE}
             (AnsiChar(v) in path)
-            {$ENDIF}
+            {$ENDIF !NEXTGEN}
             ){+.} or (SOIChar(v) >= 256)) then
             TokRec^.state := tsIdentifier else
           begin
@@ -4728,7 +4738,7 @@ redo_char:
           goto redo_char;
         end;
         inc(tok.st_pos);
-      end;
+      end; // tsNull
 
     tsCommentStart:
       begin
@@ -4820,7 +4830,8 @@ redo_char:
         TokRec^.state := tsParamValue;
         goto redo_char;
       end;
-{$IFDEF SUPER_METHOD}
+
+    {$IFDEF SUPER_METHOD}
     tsEvalMethod:
       begin
         if ObjectIsType(TokRec^.current, stMethod) and assigned(TokRec^.current.AsMethod) then
@@ -4842,19 +4853,21 @@ redo_char:
         ')':
             TokRec^.state := tsIdentifier;
         else
-          if (tok.depth >= SUPER_TOKENER_MAX_DEPTH-1) then
           begin
-            tok.err := teDepth;
-            goto out;
+            if (tok.depth >= SUPER_TOKENER_MAX_DEPTH-1) then
+            begin
+              tok.err := teDepth;
+              goto out;
+            end;
+            inc(evalstack);
+            TokRec^.state := tsMethodPut;
+            inc(tok.depth);
+            tok.ResetLevel(tok.depth);
+            TokRec := @tok.stack[tok.depth];
+            goto redo_char;
           end;
-          inc(evalstack);
-          TokRec^.state := tsMethodPut;
-          inc(tok.depth);
-          tok.ResetLevel(tok.depth);
-          TokRec := @tok.stack[tok.depth];
-          goto redo_char;
-        end;
-      end;
+        end; // case
+      end; // tsMethodValue
 
     tsMethodPut:
       begin
@@ -4875,31 +4888,36 @@ redo_char:
               TokRec^.saved_state := tsIdentifier;
               TokRec^.state := tsEatws;
             end;
-        else
-          tok.err := teEvalMethod;
-          goto out;
+          else
+            begin
+              tok.err := teEvalMethod;
+              goto out;
+            end;
         end;
-      end;
-{$ENDIF}
+      end; // tsMethodPut
+    {$ENDIF SUPER_METHOD}
+
     tsParamValue:
       begin
         case v of
         ']':
             TokRec^.state := tsIdentifier;
         else
-          if (tok.depth >= SUPER_TOKENER_MAX_DEPTH-1) then
           begin
-            tok.err := teDepth;
-            goto out;
+            if (tok.depth >= SUPER_TOKENER_MAX_DEPTH-1) then
+            begin
+              tok.err := teDepth;
+              goto out;
+            end;
+            inc(evalstack);
+            TokRec^.state := tsParamPut;
+            inc(tok.depth);
+            tok.ResetLevel(tok.depth);
+            TokRec := @tok.stack[tok.depth];
+            goto redo_char;
           end;
-          inc(evalstack);
-          TokRec^.state := tsParamPut;
-          inc(tok.depth);
-          tok.ResetLevel(tok.depth);
-          TokRec := @tok.stack[tok.depth];
-          goto redo_char;
-        end;
-      end;
+        end; // case
+      end; // tsParamValue
 
     tsParamPut:
       begin
@@ -4938,9 +4956,10 @@ redo_char:
           begin
             TokRec^.saved_state := tsIdentifier;
             TokRec^.state := tsStringEscape;
-          end else
+          end else begin
             tok.pb.Append(@v, 1);
-        end else
+          end;
+        end else { "when "athis<>nil" }
         begin
          if (SOIChar(v) < 256) and
            {+}
@@ -4949,7 +4968,7 @@ redo_char:
            (IsCharInDelimiters(v) or IsCharInSpaces(v))
            {$ELSE}
            (AnsiChar(v) in reserved)
-           {$ENDIF}
+           {$ENDIF !NEXTGEN}
            {+.} then
          begin
            TokRec^.gparent := TokRec^.parent;
@@ -4959,47 +4978,51 @@ redo_char:
 
              {%H-}case ObjectGetType(TokRec^.parent) of
                stObject:
-                 case v of
-                   '.':
-                     begin
-                       TokRec^.state := tsEvalProperty;
-                       if tok.pb.FBPos > 0 then
-                         TokRec^.current := TokRec^.parent.AsObject.GetO(tok.pb.Fbuf);
-                     end;
-                   '[':
-                     begin
-                       TokRec^.state := tsEvalArray;
-                       if tok.pb.FBPos > 0 then
-                         TokRec^.current := TokRec^.parent.AsObject.GetO(tok.pb.Fbuf);
-                     end;
-                   '(':
-                     begin
-                       TokRec^.state := tsEvalMethod;
-                       if tok.pb.FBPos > 0 then
-                         TokRec^.current := TokRec^.parent.AsObject.GetO(tok.pb.Fbuf);
-                     end;
-                 else
-                   if tok.pb.FBPos > 0 then
-                     TokRec^.current := TokRec^.parent.AsObject.GetO(tok.pb.Fbuf);
-                   if (foPutValue in options) and (evalstack = 0) then
-                   begin
-                     TokRec^.parent.AsObject.PutO(tok.pb.Fbuf, put);
-                     TokRec^.current := put;
-                   end else
-                   if (foDelete in options) and (evalstack = 0) then
-                   begin
-                     TokRec^.current := TokRec^.parent.AsObject.Delete(tok.pb.Fbuf);
-                   end else
-                   if (TokRec^.current = nil) and (foCreatePath in options) then
-                   begin
-                     TokRec^.current := TSuperObject.Create(dt);
-                     TokRec^.parent.AsObject.PutO(tok.pb.Fbuf, TokRec^.current);
-                   end;
-                   if not (foDelete in options) then
-                     TokRec^.current := TokRec^.parent.AsObject.GetO(tok.pb.Fbuf);
-                   TokRec^.state := tsFinish;
-                   goto redo_char;
-                 end;
+                 begin
+                   case v of
+                     '.':
+                       begin
+                         TokRec^.state := tsEvalProperty;
+                         if tok.pb.FBPos > 0 then
+                           TokRec^.current := TokRec^.parent.AsObject.GetO(tok.pb.Fbuf);
+                       end;
+                     '[':
+                       begin
+                         TokRec^.state := tsEvalArray;
+                         if tok.pb.FBPos > 0 then
+                           TokRec^.current := TokRec^.parent.AsObject.GetO(tok.pb.Fbuf);
+                       end;
+                     '(':
+                       begin
+                         TokRec^.state := tsEvalMethod;
+                         if tok.pb.FBPos > 0 then
+                           TokRec^.current := TokRec^.parent.AsObject.GetO(tok.pb.Fbuf);
+                       end;
+                     else
+                       begin
+                         if tok.pb.FBPos > 0 then
+                           TokRec^.current := TokRec^.parent.AsObject.GetO(tok.pb.Fbuf);
+                         if (foPutValue in options) and (evalstack = 0) then
+                         begin
+                           TokRec^.parent.AsObject.PutO(tok.pb.Fbuf, put);
+                           TokRec^.current := put;
+                         end else
+                         if (foDelete in options) and (evalstack = 0) then
+                         begin
+                           TokRec^.current := TokRec^.parent.AsObject.Delete(tok.pb.Fbuf);
+                         end else
+                         if (TokRec^.current = nil) and (foCreatePath in options) then
+                         begin
+                           TokRec^.current := TSuperObject.Create(dt);
+                           TokRec^.parent.AsObject.PutO(tok.pb.Fbuf, TokRec^.current);
+                         end;
+                         if not (foDelete in options) then
+                           TokRec^.current := TokRec^.parent.AsObject.GetO(tok.pb.Fbuf);
+                         TokRec^.state := tsFinish;
+                         goto redo_char;
+                       end;
+                   end; // case
+                 end; // stObject
                stArray:
                  begin
                    if TokRec^.obj <> nil then
@@ -5041,20 +5064,22 @@ redo_char:
                            TokRec^.state := tsEvalArray;
                          end;
                        '(': TokRec^.state := tsEvalMethod;
-                     else
-                       if (foPutValue in options) and (evalstack = 0) then
-                       begin
-                         TokRec^.parent.AsArray.PutO(numi, put);
-                         TokRec^.current := put;
-                       end else
-                       if (foDelete in options) and (evalstack = 0) then
-                       begin
-                         TokRec^.current := TokRec^.parent.AsArray.Delete(numi);
-                       end else
-                         TokRec^.current := TokRec^.parent.AsArray.GetO(numi);
-                       TokRec^.state := tsFinish;
-                       goto redo_char
-                     end;
+                       else
+                         begin
+                           if (foPutValue in options) and (evalstack = 0) then
+                           begin
+                             TokRec^.parent.AsArray.PutO(numi, put);
+                             TokRec^.current := put;
+                           end else
+                           if (foDelete in options) and (evalstack = 0) then
+                           begin
+                             TokRec^.current := TokRec^.parent.AsArray.Delete(numi);
+                           end else
+                             TokRec^.current := TokRec^.parent.AsArray.GetO(numi);
+                           TokRec^.state := tsFinish;
+                           goto redo_char
+                         end;
+                     end; // case
                    end else
                    begin
                      case v of
@@ -5085,19 +5110,21 @@ redo_char:
 
                            TokRec^.state := tsEvalMethod;
                          end;
-                     else
-                       if (foPutValue in options) and (evalstack = 0) then
-                       begin
-                         TokRec^.parent.AsArray.Add(put);
-                         TokRec^.current := put;
-                       end else
-                         if tok.pb.FBPos = 0 then
-                           TokRec^.current := TokRec^.parent.AsArray.GetO(TokRec^.parent.AsArray.Length - 1);
-                       TokRec^.state := tsFinish;
-                       goto redo_char
-                     end;
-                   end;
-                 end;
+                       else
+                         begin
+                           if (foPutValue in options) and (evalstack = 0) then
+                           begin
+                             TokRec^.parent.AsArray.Add(put);
+                             TokRec^.current := put;
+                           end else
+                             if tok.pb.FBPos = 0 then
+                               TokRec^.current := TokRec^.parent.AsArray.GetO(TokRec^.parent.AsArray.Length - 1);
+                           TokRec^.state := tsFinish;
+                           goto redo_char
+                         end;
+                     end; // case
+                   end; // if
+                 end; // stArray
                {$IFDEF SUPER_METHOD}
                stMethod:
                  case v of
@@ -5124,28 +5151,31 @@ redo_char:
                        TokRec^.state := tsEvalMethod;
                        TokRec^.obj := nil;
                      end;
-                 else
-                   if not (foPutValue in options) or (evalstack > 0) then
+                   else
                    begin
-                     TokRec^.current := nil;
-                     sm := TokRec^.parent.AsMethod;
-                     sm(TokRec^.gparent, TokRec^.obj, TokRec^.current);
-                     TokRec^.obj := nil;
-                     TokRec^.state := tsFinish;
-                     goto redo_char
-                   end else
-                   begin
-                     tok.err := teEvalMethod;
-                     TokRec^.obj := nil;
-                     goto out;
+                     if not (foPutValue in options) or (evalstack > 0) then
+                     begin
+                       TokRec^.current := nil;
+                       sm := TokRec^.parent.AsMethod;
+                       sm(TokRec^.gparent, TokRec^.obj, TokRec^.current);
+                       TokRec^.obj := nil;
+                       TokRec^.state := tsFinish;
+                       goto redo_char
+                     end else
+                     begin
+                       tok.err := teEvalMethod;
+                       TokRec^.obj := nil;
+                       goto out;
+                     end;
                    end;
-                 end;
+                 end; // stMethod
                {$ENDIF SUPER_METHOD}
              end; // case
-          end else
+          end else begin
             tok.pb.Append(@v, 1);
-        end;
-      end;
+          end;
+        end; //  if .. "when "athis<>nil"
+      end; // tsIdentifier
 
     tsStringEscape:
       case v of
@@ -5177,7 +5207,7 @@ redo_char:
       else
         tok.pb.Append(@v, 1);
         TokRec^.state := TokRec^.saved_state;
-      end;
+      end; // tsStringEscape
 
     tsEscapeUnicode:
       begin
@@ -5186,7 +5216,7 @@ redo_char:
            (IsCharInDiapasone(v,'0','9') or IsCharInDiapasone(v,'a','f') or IsCharInDiapasone(v,'A','F'))
            {$ELSE}
            (AnsiChar(v) in super_hex_chars_set)
-           {$ENDIF}) {+.} then
+           {$ENDIF !NEXTGEN}) {+.} then
         begin
           inc(tok.ucs_char, (Word(hexdigit(v)) shl ((3-tok.st_pos)*4)));
           inc(tok.st_pos);
@@ -5200,7 +5230,8 @@ redo_char:
           tok.err := teParseString;
           goto out;
         end
-      end;
+      end; // tsEscapeUnicode
+
     tsEscapeHexadecimal:
       begin
         if ((SOIChar(v) < 256) and {+}
@@ -5208,7 +5239,7 @@ redo_char:
            (IsCharInDiapasone(v,'0','9') or IsCharInDiapasone(v,'a','f') or IsCharInDiapasone(v,'A','F'))
            {$ELSE}
            (AnsiChar(v) in super_hex_chars_set)
-           {$ENDIF}) {+.} then
+           {$ENDIF !NEXTGEN}) {+.} then
         begin
           inc(tok.ucs_char, (Word(hexdigit(v)) shl ((1-tok.st_pos)*4)));
           inc(tok.st_pos);
@@ -5222,7 +5253,8 @@ redo_char:
           tok.err := teParseString;
           goto out;
         end
-      end;
+      end; // tsEscapeHexadecimal
+
     tsBoolean:
       begin
         tok.pb.Append(@v, 1);
@@ -5234,7 +5266,7 @@ redo_char:
             (IsCharInDiapasone(v, 'a','z') or IsCharInDiapasone(v, 'A','Z') or (v='.') or (v='_'))
             {$ELSE}
             (AnsiChar(v) in path)
-            {$ENDIF}
+            {$ENDIF !NEXTGEN}
             ){+.} or (SOIChar(v) >= 256)) then
             TokRec^.state := tsIdentifier else
           begin
@@ -5252,7 +5284,7 @@ redo_char:
             (IsCharInDiapasone(v, 'a','z') or IsCharInDiapasone(v, 'A','Z') or (v='.') or (v='_'))
             {$ELSE}
             (AnsiChar(v) in path)
-            {$ENDIF}
+            {$ENDIF !NEXTGEN}
             ){+.} or (SOIChar(v) >= 256)) then
             TokRec^.state := tsIdentifier else
           begin
@@ -5269,7 +5301,7 @@ redo_char:
           goto redo_char;
         end;
         inc(tok.st_pos);
-      end;
+      end; // tsBoolean
 
     tsNumber:
       begin
@@ -5279,7 +5311,7 @@ redo_char:
            IsCharInSuperNumber(v)
            {$ELSE}
            (AnsiChar(v) in super_number_chars_set)
-           {$ENDIF}
+           {$ENDIF !NEXTGEN}
            {+.} then
         begin
           tok.pb.Append(@v, 1);
@@ -5320,8 +5352,9 @@ redo_char:
               if (foDelete in options) and (evalstack = 0) then
                 TokRec^.current := athis.AsArray.Delete(numi) else
                 TokRec^.current := athis.AsArray.GetO(numi);
-            end else
+            end else begin
               TokRec^.current := TSuperObject.Create(numi);
+            end;
 
           end else
           if (tok.is_double <> 0) then
@@ -5358,7 +5391,7 @@ redo_char:
           TokRec^.state := tsEatws;
           goto redo_char;
         end
-      end;
+      end; // tsNumber
 
     tsArray:
       begin
@@ -5418,7 +5451,7 @@ redo_char:
           ((v = '"') or (v = ''''))
           {$ELSE}
           CharInSet(v, ['"', ''''])
-          {$ENDIF}{+.} then
+          {$ENDIF !NEXTGEN}{+.} then
         begin
           tok.quote_char := v;
           tok.pb.Reset;
@@ -5430,7 +5463,7 @@ redo_char:
           (IsCharInDelimiters(v) or IsCharInSpaces(v))
           {$ELSE}
           (AnsiChar(v) in reserved)
-          {$ENDIF}{+.} ) ) then
+          {$ENDIF !NEXTGEN}{+.} ) ) then
         begin
           TokRec^.state := tsObjectUnquotedField;
           tok.pb.Reset;
@@ -5440,7 +5473,7 @@ redo_char:
           tok.err := teParseObjectKeyName;
           goto out;
         end
-      end;
+      end; // tsObjectFieldStart
 
     tsObjectField:
       begin
@@ -5466,7 +5499,7 @@ redo_char:
           ((v = ':') or (v = #0))
           {$ELSE}
           CharInSet(v, [':', #0])
-          {$ENDIF}{+.} then
+          {$ENDIF !NEXTGEN}{+.} then
         begin
           TokRec^.field_name := tok.pb.FBuf;
           TokRec^.saved_state := tsObjectFieldEnd;
@@ -5533,30 +5566,37 @@ redo_char:
           tok.err := teParseObjectValueSep;
           goto out;
         end
-      end;
-    end;
+      end; // tsObjectSep
+    end; // case TokRec^.state
+
     inc(str);
     inc(tok.char_offset);
   until v = #0;
 
   if(TokRec^.state <> tsFinish) and
      (TokRec^.saved_state <> tsFinish) then
+   begin
     tok.err := teParseEof;
+   end;
 
- out:
+out:
   if(tok.err in [teSuccess]) then
   begin
-{$IFDEF SUPER_METHOD}
-    if (foCallMethod in options) and ObjectIsType(TokRec^.current, stMethod) and assigned(TokRec^.current.AsMethod) then
+    {$IFDEF SUPER_METHOD}
+    if (foCallMethod in options) and ObjectIsType(TokRec^.current, stMethod)
+      and Assigned(TokRec^.current.AsMethod) then
     begin
       sm := TokRec^.current.AsMethod;
       sm(TokRec^.parent, put, Result);
     end else
-{$ENDIF}
-    Result := TokRec^.current;
-  end else
+    {$ENDIF SUPER_METHOD}
+    begin
+      Result := TokRec^.current;
+    end;
+  end else begin
     Result := nil;
-end;
+  end;
+end; // class function TSuperObject.ParseEx
 
 procedure TSuperObject.PutO(const path: SOString; const Value: ISuperObject);
 begin
@@ -9335,11 +9375,15 @@ end;
 
 function TSuperRttiContext.jFromFloat(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean;
 var
+  typ: TSuperType;
   LTypeData: PTypeData;
   o: ISuperObject;
+  SValue: SOString;
+  dt: TDateTime;
 begin
   Result := False;
-  {%H-}case ObjectGetType(obj) of
+  typ := ObjectGetType(obj); // @dbg: obj.DataType
+  {%H-}case typ of
     stInt, stDouble, stCurrency:
       begin
         TValue.Make(nil, ATypeInfo, Value);
@@ -9371,10 +9415,14 @@ begin
       end;
     stString:
       begin
-        o := SO(obj.AsString);
-        Result := ObjectIsType(o, stString)
-          or jFromFloat(ATypeInfo, o, Value);
-      end
+        SValue := obj.AsString;
+        o := SO(SValue); // @dbg: obj.DataType
+        typ := ObjectGetType(o); // @dbg: o.DataType
+        Result := typ in [stInt, stDouble, stCurrency];
+        if Result then begin
+          Result := jFromFloat(ATypeInfo, o, Value);
+        end;
+      end;
   end; // case
 end;
 
