@@ -9159,7 +9159,6 @@ begin
               i := {TypInfo.pas}GetEnumValue(ATypeInfo, SValue);
               if i >= 0 then begin
                 TValue.Make(@i, ATypeInfo, Value);
-                //?class function TRttiEnumerationType.GetValue<T{: enum}>(const AName: string): T;
                 Result := True;
               end;
             end;
@@ -9206,7 +9205,7 @@ begin
   end;
 end;//*)
 function SuperStringToSet(TypeInfo: PTypeInfo; const Value: string): Integer;
-// Safe implementation of "TypInfo.pas"."StringToSet(PTypeInfo...)"
+// Safe implementation of "TypInfo.pas"."StringToSet(PTypeInfo...)" without Exceptions
 var
   P: PChar;
   EnumName: string;
