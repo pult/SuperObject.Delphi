@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1217.0017
+{ superobject.pas } // version: 2020.1217.0117
 (*
  *                         Super Object Toolkit
  *
@@ -1219,8 +1219,8 @@ type
     function jToString(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToClass(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToWChar(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-    function jToEnumeration(var Value: TValue; const index: ISuperObject = nil): ISuperObject;
-    function jToSet(var Value: TValue; const index: ISuperObject = nil): ISuperObject;
+    function jToEnumeration(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
+    function jToSet(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToVariant(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToRecord(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToArray(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
