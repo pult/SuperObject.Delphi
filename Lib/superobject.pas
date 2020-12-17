@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1217.0317
+{ superobject.pas } // version: 2020.1217.0547
 (*
  *                         Super Object Toolkit
  *
@@ -1212,43 +1212,43 @@ type
     function Array2Class(const Value: TValue; const index: ISuperObject): TSuperObject;
     {$ENDIF USE_REFLECTION}
   protected // ToJson
-    function jToInt64(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-    function jToChar(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-    function jToInteger(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-    function jToFloat(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-    function jToString(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
+    function jToInt64(var Value: TValue; const {%H-}index: ISuperObject = nil): ISuperObject; virtual;
+    function jToChar(var Value: TValue; const {%H-}index: ISuperObject = nil): ISuperObject; virtual;
+    function jToInteger(var Value: TValue; const {%H-}index: ISuperObject = nil): ISuperObject; virtual;
+    function jToFloat(var Value: TValue; const {%H-}index: ISuperObject = nil): ISuperObject; virtual;
+    function jToString(var Value: TValue; const {%H-}index: ISuperObject = nil): ISuperObject; virtual;
     function jToClass(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-    function jToWChar(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-    function jToEnumeration(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
+    function jToWChar(var Value: TValue; const {%H-}index: ISuperObject = nil): ISuperObject; virtual;
+    function jToEnumeration(var Value: TValue; const {%H-}index: ISuperObject = nil): ISuperObject; virtual;
     function jToSet(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-    function jToVariant(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-    function jToRecord(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
+    function jToVariant(var Value: TValue; const {%H-}index: ISuperObject = nil): ISuperObject; virtual;
+    function jToRecord(var {%H-}Value: TValue; const {%H-}index: ISuperObject = nil): ISuperObject; virtual;
     function jToArray(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function jToDynArray(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-    function jToClassRef(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
-    function jToInterface(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
+    function jToClassRef(var Value: TValue; const {%H-}index: ISuperObject = nil): ISuperObject; virtual;
+    function jToInterface(var Value: TValue; const {%H-}index: ISuperObject = nil): ISuperObject; virtual;
   protected // FromJson
-    function jFromChar(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
-    function jFromWideChar(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
+    function jFromChar({%H-}ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
+    function jFromWideChar({%H-}ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromInt64(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromInt(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromEnumeration(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromSet(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromFloat(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
-    function jFromString(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
+    function jFromString({%H-}ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromClass(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
-    function jFromRecord(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
+    function jFromRecord({%H-}ATypeInfo: PTypeInfo; const {%H-}obj: ISuperObject; var {%H-}Value: TValue): Boolean; virtual;
     function jFromDynArray(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromArray(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
-    function jFromClassRef(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
-    function jFromUnknown(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
+    function jFromClassRef({%H-}ATypeInfo: PTypeInfo; const {%H-}obj: ISuperObject; var {%H-}Value: TValue): Boolean; virtual;
+    function jFromUnknown({%H-}ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function jFromInterface(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
   public // RWSynchronize
-    procedure BeginRead(Obj: Pointer; var L: TMREWSyncHandle); overload;
+    procedure BeginRead({%H-}Obj: Pointer; var L: TMREWSyncHandle); overload;
     procedure BeginRead<T>(const obj: T; var L: TMREWSyncHandle); overload;
     procedure EndRead(var L: TMREWSyncHandle);
 
-    procedure BeginWrite(Obj: Pointer; var L: TMREWSyncHandle); overload;
+    procedure BeginWrite({%H-}Obj: Pointer; var L: TMREWSyncHandle); overload;
     procedure BeginWrite<T>(const obj: T; var L: TMREWSyncHandle); overload;
     procedure EndWrite(var L: TMREWSyncHandle);
   public
@@ -8787,8 +8787,10 @@ begin
 end;
 
 procedure TSuperRttiContext.BeginRead(Obj: Pointer; var L: TMREWSyncHandle);
+{$if declared(TSuperMREWSync)}
 var
   S: TSuperMREWSync;
+{$ifend}
 begin
   L := nil;
   {$if declared(TSuperMREWSync)}
@@ -8816,8 +8818,10 @@ begin
 end;
 
 procedure TSuperRttiContext.EndRead(var L: TMREWSyncHandle);
+{$if declared(TSuperMREWSync)}
 var
   S: TSuperMREWSync;
+{$ifend}
 begin
   {$if declared(TSuperMREWSync)}
   if Assigned(L) then begin
@@ -8837,8 +8841,10 @@ begin
 end;
 
 procedure TSuperRttiContext.BeginWrite(Obj: Pointer; var L: TMREWSyncHandle);
+{$if declared(TSuperMREWSync)}
 var
   S: TSuperMREWSync;
+{$ifend}
 begin
   L := nil;
   {$if declared(TSuperMREWSync)}
@@ -8866,8 +8872,10 @@ begin
 end;
 
 procedure TSuperRttiContext.EndWrite(var L: TMREWSyncHandle);
+{$if declared(TSuperMREWSync)}
 var
   S: TSuperMREWSync;
+{$ifend}
 begin
   {$if declared(TSuperMREWSync)}
   if Assigned(L) then begin
@@ -9000,7 +9008,7 @@ var
   L: TMREWSyncHandle;
   ret: TValue;
 begin
-  BeginWrite(@obj, L);
+  BeginWrite(@obj, {%H-}L);
   try
     ret:= TValue.Empty; // https://code.google.com/p/superobject/issues/detail?id=53
     if FromJson(TypeInfo(T), obj, ret) then begin
@@ -9029,7 +9037,7 @@ var
   L: TMREWSyncHandle;
   V: TValue;
 begin
-  BeginRead(@obj, L);
+  BeginRead(@obj, {%H-}L);
   try
     TValue.Make(@obj, TypeInfo(T), V);
     if index <> nil then
@@ -9124,7 +9132,7 @@ begin
         i := obj.AsInteger;
         if (i = -1) then begin // "-1" == True
            TValue.Make(nil, ATypeInfo, Value);
-           TypeData := Value.TypeInfo.TypeData;
+           TypeData := Value.TypeData;
            if (TypeData.MinValue = 0) and (TypeData.MaxValue = 1) then begin
              i := 1; // "-1" == True
              TValue.Make(@i, ATypeInfo, Value);
@@ -9143,7 +9151,7 @@ begin
           and jFromInt(ATypeInfo, obj, Value);
         if (not Result) and FForceEnumeration then begin
            TValue.Make(nil, ATypeInfo, Value);
-           TypeData := Value.TypeInfo.TypeData;
+           TypeData := Value.TypeData;
             if (TypeData.MinValue = 0) and (TypeData.MaxValue = 1)
               and ( SameText(SValue, 'True') or SameText(SValue, 'False')
                 or SameText(SValue, '1') or (SValue = '-1') or (SValue = '0')
@@ -9210,7 +9218,7 @@ var
   P: PChar;
   EnumName: string;
   EnumValue: NativeInt;
-  PEnumInfo: PPTypeInfo;
+  PEnumInfo: {$IFDEF FPC}PTypeInfo{$ELSE}PPTypeInfo{$ENDIF};
 
   // grab the next enum name
   function NextWord(var P: PChar): string;
@@ -9253,7 +9261,7 @@ begin
     EnumName := NextWord(P);
     while EnumName <> '' do
     begin
-      EnumValue := GetEnumValue(PEnumInfo^, EnumName);
+      EnumValue := GetEnumValue(PEnumInfo{$IFNDEF FPC}^{$ENDIF}, EnumName);
       if EnumValue < 0 then
       {+}
       begin
@@ -9327,32 +9335,47 @@ end;
 
 function TSuperRttiContext.jFromFloat(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean;
 var
+  LTypeData: PTypeData;
   o: ISuperObject;
 begin
-  case ObjectGetType(obj) of
-  stInt, stDouble, stCurrency:
-    begin
-      Result := True;
-      TValue.Make(nil, ATypeInfo, Value);
-      case GetTypeData(ATypeInfo).FloatType of
-        ftSingle: TValueData(Value).FAsSingle := obj.AsDouble;
-        ftDouble: TValueData(Value).FAsDouble := obj.AsDouble;
-        ftExtended: TValueData(Value).FAsExtended := obj.AsDouble;
-        ftComp: TValueData(Value).FAsSInt64 := obj.AsInteger;
-        ftCurr: TValueData(Value).FAsCurr := obj.AsCurrency;
-        else
-          Result := False;
+  Result := False;
+  {%H-}case ObjectGetType(obj) of
+    stInt, stDouble, stCurrency:
+      begin
+        TValue.Make(nil, ATypeInfo, Value);
+        LTypeData := GetTypeData(ATypeInfo);
+        if Assigned(LTypeData) then begin
+          case LTypeData.FloatType of
+            ftSingle: begin
+              TValueData(Value).FAsSingle := obj.AsDouble;
+              Result := True;
+            end;
+            ftDouble: begin
+              TValueData(Value).FAsDouble := obj.AsDouble;
+              Result := True;
+            end;
+            ftExtended: begin
+              TValueData(Value).FAsExtended := obj.AsDouble;
+              Result := True;
+            end;
+            ftComp: begin
+              TValueData(Value).FAsSInt64 := obj.AsInteger;
+              Result := True;
+            end;
+            ftCurr: begin
+              TValueData(Value).FAsCurr := obj.AsCurrency;
+              Result := True;
+            end;
+          end; // case
+        end;
       end;
-    end;
-  stString:
-    begin
-      o := SO(obj.AsString);
-      Result := ObjectIsType(o, stString)
-        or jFromFloat(ATypeInfo, o, Value);
-    end
-  else
-     Result := False;
-  end;
+    stString:
+      begin
+        o := SO(obj.AsString);
+        Result := ObjectIsType(o, stString)
+          or jFromFloat(ATypeInfo, o, Value);
+      end
+  end; // case
 end;
 
 function TSuperRttiContext.jFromString(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean;
@@ -9617,7 +9640,7 @@ begin
   stNull:
     begin
       {$IFDEF FPC}
-      TValue.Make(nil, TypeInfo, Value);
+      TValue.Make(nil, ATypeInfo, Value);
       {$ELSE}
       TValue.MakeWithoutCopy(nil, ATypeInfo, Value);
       {$ENDIF}
@@ -9645,7 +9668,7 @@ begin
 
     if Result then begin
       {$IFDEF FPC}
-      TValue.Make(@p, TypeInfo, Value);
+      TValue.Make(@p, ATypeInfo, Value);
       {$ELSE !FPC}
       TValue.MakeWithoutCopy(@p, ATypeInfo, Value);
       {$ENDIF !FPC}
@@ -9852,11 +9875,12 @@ begin
     Exit;
 
   LBaseType := ATypeInfo; // @dbg: ATypeInfo^
-  Result := SerialFromJson.TryGetValue(ATypeInfo, Serial);
+  Serial := nil;
+  Result := SerialFromJson.TryGetValue(ATypeInfo, Serial) and Assigned(Serial);
   if (not Result) and FForceBaseType then begin // https://github.com/pult/SuperObject.Delphi/issues/1#issuecomment-745615978
     LBaseType := SuperBaseTypeInfo(ATypeInfo);
     if (LBaseType <> ATypeInfo) then
-      Result := SerialFromJson.TryGetValue(LBaseType, Serial);
+      Result := SerialFromJson.TryGetValue(LBaseType, Serial) and Assigned(Serial);
   end;
   if Result then begin
     TValue.Make(nil, LBaseType, Value);
@@ -10234,7 +10258,7 @@ begin
     Result := TSuperObject.Create(TValueData(Value).FAsSLong); // == jToInteger(Value, index);
     Exit;
   end;
-  TypeData := Value.TypeInfo.TypeData;
+  TypeData := Value.TypeData;
   LValue := GetEnumName(Value.TypeInfo,Value.AsOrdinal);
   if (TypeData.MinValue = 0) and (TypeData.MaxValue = 1)
     and ( SameText(LValue, 'True') or SameText(LValue, 'False') ) then
@@ -10244,7 +10268,7 @@ begin
   end else begin
     LEnum := GetEnumName(Value.TypeInfo,TypeData.MinValue);
     if FForceDefault or (LValue <> LEnum) then
-      Result := TSuperObject.Create(LValue);
+      Result := TSuperObject.Create(SOString(LValue));
   end;
 end;
 
@@ -10426,14 +10450,15 @@ begin
   if Value.IsEmpty and (not FForceDefault) then
     Exit;
   LType := Value.TypeInfo; //@dbg: Value.FTypeInfo^
-  if SerialToJson.TryGetValue(LType, Serial) then begin
+  Serial := nil;
+  if SerialToJson.TryGetValue(LType, Serial) and Assigned(Serial) then begin
     Result := Serial(Self, Value, index);
     Exit;
   end;
   if FForceBaseType then begin // https://github.com/pult/SuperObject.Delphi/issues/1#issuecomment-745615978
     LBaseType := SuperBaseTypeInfo(LType);
     if (LBaseType <> LType) then begin
-      if SerialToJson.TryGetValue(LBaseType, Serial) then begin
+      if SerialToJson.TryGetValue(LBaseType, Serial) and Assigned(Serial) then begin
         Result := Serial(Self, Value, index);
         Exit;
       end;
