@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1217.0547
+{ superobject.pas } // version: 2020.1217.0757
 (*
  *                         Super Object Toolkit
  *
@@ -5353,6 +5353,12 @@ redo_char:
                 TokRec^.current := athis.AsArray.Delete(numi) else
                 TokRec^.current := athis.AsArray.GetO(numi);
             end else begin
+              {+} // pult: 2020.1217.0757
+              if (code > 0) then begin
+                TokRec^.state := tsString;
+                goto redo_char;
+              end else
+              {+.}
               TokRec^.current := TSuperObject.Create(numi);
             end;
 
@@ -5370,6 +5376,12 @@ redo_char:
               end;
               p^ := #0;
               val(tok.pb.FBuf, numi, code);
+              {+} // pult: 2020.1217.0757
+              if (code > 0) then begin
+                TokRec^.state := tsString;
+                goto redo_char;
+              end;
+              {+.}
               case tok.floatcount of
                 0: numi := numi * 10000;
                 1: numi := numi * 1000;
@@ -5380,6 +5392,12 @@ redo_char:
             end else
             begin
               val(tok.pb.FBuf, numd, code);
+              {+} // pult: 2020.1217.0757
+              if (code > 0) then begin
+                TokRec^.state := tsString;
+                goto redo_char;
+              end else
+              {+.}
               TokRec^.current := TSuperObject.Create(numd);
             end;
           end else
@@ -9421,6 +9439,13 @@ begin
         Result := typ in [stInt, stDouble, stCurrency];
         if Result then begin
           Result := jFromFloat(ATypeInfo, o, Value);
+        {+} // pult: 2020.1217.0757
+        end else if (typ = stString) then begin
+          Result := TryObjectToDate(o, dt);
+          if Result then begin
+            TValue.Make(@dt, TypeInfo(Double), Value);
+          end;
+        {+.}
         end;
       end;
   end; // case
