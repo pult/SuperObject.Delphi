@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1217.0117
+{ superobject.pas } // version: 2020.1217.0317
 (*
  *                         Super Object Toolkit
  *
@@ -2803,7 +2803,7 @@ begin
 end;
 {+.}
 
-{$ENDIF}
+{$ENDIF HAVE_RTTI}
 
 {+}
 {$IFNDEF HAVE_INTERFACED_OBJECT}
@@ -4984,7 +4984,7 @@ redo_char:
                    if (foPutValue in options) and (evalstack = 0) then
                    begin
                      TokRec^.parent.AsObject.PutO(tok.pb.Fbuf, put);
-                     TokRec^.current := put
+                     TokRec^.current := put;
                    end else
                    if (foDelete in options) and (evalstack = 0) then
                    begin
@@ -9479,21 +9479,23 @@ begin
       begin
         Result := False;
         if IsList(Context, ATypeInfo) and IsGenericType(ATypeInfo) then begin
-          Result := True;
           if Value.Kind <> tkClass then
             Value := GetTypeData(ATypeInfo).ClassType.Create;
           AMethod := Context.GetType(Value.AsObject.ClassType).GetMethod('Add');
-          LArrObj := obj.AsArray;
-          for i := 0 to LArrObj.Length-1 do begin
-            LValue := TValue.Empty;
-            LRttiType := GetDeclaredGenericType(Context, ATypeInfo);
-            LTypeInfo := LRttiType.Handle;
-            Result := FromJson(LTypeInfo, LArrObj[i], LValue);
-            if Result then
-              AMethod.Invoke(Value.AsObject, [LValue])
-            else
-              Exit; // error
-          end; // for
+          Result := Assigned(AMethod); // True;
+          if Result then begin
+            LArrObj := obj.AsArray;
+            for i := 0 to LArrObj.Length-1 do begin
+              LValue := TValue.Empty;
+              LRttiType := GetDeclaredGenericType(Context, ATypeInfo);
+              LTypeInfo := LRttiType.Handle;
+              Result := FromJson(LTypeInfo, LArrObj[i], LValue);
+              if Result then
+                AMethod.Invoke(Value.AsObject, [LValue])
+              else
+                Exit; // error
+            end; // for
+          end;
         end;
       end;
     {+.}
@@ -9942,11 +9944,21 @@ begin
     Result := TSuperObject.Create(stArray);
 
     enumeratorValue := getEnumerator.Invoke(obj, []);
+    //if (enumeratorValue = nil) then
+    //  Exit;
     enumObject := TValueData(enumeratorValue).FAsObject;
+    //if (enumObject = nil) then
+    //  Exit;
 
     t := Context.GetType(enumObject.ClassType);
+    //if (t = nil) then
+    //  Exit;
     moveNext := t.GetMethod('MoveNext');
+    if (moveNext = nil) then
+      Exit;
     current := t.GetProperty('Current');
+    if (current = nil) then
+      Exit;
 
     while moveNext.Invoke(enumObject, []).AsBoolean do
     begin
