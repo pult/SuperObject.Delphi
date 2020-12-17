@@ -1,11 +1,11 @@
 object Form1: TForm1
   Left = 491
-  Height = 258
+  Height = 468
   Top = 232
-  Width = 388
+  Width = 367
   Caption = 'Form1'
-  ClientHeight = 258
-  ClientWidth = 388
+  ClientHeight = 468
+  ClientWidth = 367
   Position = poDefaultPosOnly
   LCLVersion = '2.1.0.0'
   object BMarshal: TButton
@@ -13,28 +13,58 @@ object Form1: TForm1
     Height = 25
     Top = 16
     Width = 96
-    Caption = 'BMarshal'
+    Caption = 'Marshal'
     OnClick = BMarshalClick
     TabOrder = 0
   end
   object BUnMarshal: TButton
-    Left = 120
+    Left = 16
     Height = 25
-    Top = 16
+    Top = 248
     Width = 107
     Caption = 'UnMarshal'
     OnClick = BUnMarshalClick
     TabOrder = 1
   end
-  object Memo1: TMemo
+  object MMarshal: TMemo
     Left = 16
-    Height = 192
+    Height = 178
     Top = 48
-    Width = 355
+    Width = 336
     Anchors = [akTop, akLeft, akRight, akBottom]
+    Font.Name = 'Consolas'
     Lines.Strings = (
-      'Memo1'
+      '{'
+      '  "FieldDT1"  :"2020-12-17T00:36:34.651Z"'
+      '}'
+      ''
     )
+    ParentFont = False
     TabOrder = 2
+  end
+  object MUnMarshal: TMemo
+    Left = 16
+    Height = 176
+    Top = 280
+    Width = 336
+    Anchors = [akTop, akLeft, akRight, akBottom]
+    Font.Name = 'Consolas'
+    ParentFont = False
+    TabOrder = 3
+  end
+  object CType: TComboBox
+    Left = 128
+    Height = 26
+    Top = 15
+    Width = 224
+    ItemHeight = 18
+    ItemIndex = 0
+    Items.Strings = (
+      'TCustomDateTime'
+      'TCustomRecord'
+    )
+    Style = csDropDownList
+    TabOrder = 4
+    Text = 'TCustomDateTime'
   end
 end

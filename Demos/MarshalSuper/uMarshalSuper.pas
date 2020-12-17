@@ -18,8 +18,11 @@ type
     class function Unmarshal<T>(Text: string; out Data:T): Boolean; overload; static;
   end;
 
+  { TSerialContext }
+
   TSerialContext = class(TSuperRttiContext)
   public
+    class procedure InitializeGlobal;
     constructor Create; override;
   end;
 
@@ -145,6 +148,24 @@ end;
 
 { TSerialContext }
 
+var
+  sc_Initialized: Boolean;
+class procedure TSerialContext.InitializeGlobal;
+begin
+  if sc_Initialized then
+    Exit;
+  sc_Initialized := True;
+
+  {$if declared(SuperRttiContextClassDefault)} // optional: default json marshaling class
+  SuperRttiContextClassDefault := TSerialContext;
+  {$ifend}
+
+  {$if declared(SuperRttiContextDefault)} // optional: default json global marshaling object
+  SuperRttiContextDefault.Free;
+  SuperRttiContextDefault := TSerialContext.Create;
+  {$ifend}
+end;
+
 constructor TSerialContext.Create;
 begin
   inherited;
@@ -157,12 +178,5 @@ begin
 end;
 
 initialization
-//  {$if declared(SuperRttiContextClassDefault)}
-//  SuperRttiContextClassDefault := TSerialContext; // optional: default json marshaling
-//  {$ifend}
-
-  {$if declared(SuperRttiContextDefault)} // optional: default json global marshaling object
-  SuperRttiContextDefault.Free;
-  SuperRttiContextDefault := TSerialContext.Create;
-  {$ifend}
+  //TSerialContext.InitializeGlobal; // optional
 end.
