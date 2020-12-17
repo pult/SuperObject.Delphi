@@ -20,7 +20,8 @@ type
   TForm1 = class(TForm)
     BMarshal: TButton;
     BUnMarshal: TButton;
-    Memo1: TMemo;
+    MMarshal: TMemo;
+    MUnMarshal: TMemo;
     procedure BMarshalClick(Sender: TObject);
     procedure BUnMarshalClick(Sender: TObject);
   private
@@ -35,7 +36,7 @@ implementation
 {$R *.dfm}
 
 uses
-  supertypes, Rtti;
+  supertypes, Rtti, TypInfo;
 
 type
   TCustomDataTime = type TDateTime;
@@ -44,15 +45,21 @@ type
 
   TCustomRecord = record
     [SOName('DATE_1')]
-    DataTimeField1: TCustomDataTime;
+    FieldDT1: TCustomDataTime;
 
     [SOName('DATE_2')]
     //--[SOTypeMap<TDateTime>] // DX ERROR: Failed call attribute constructor
     [SOType(TypeInfo(TDateTime))]
-    DataTimeField2: TCustomDataTime2;
+    FieldDT2: TCustomDataTime2;
 
     [SOName('BOOL')]
-    BooleanField: TCustomBoolean;
+    FieldBool: TCustomBoolean;
+
+    [SOName('SET')]
+    FieldSet: TComponentState;
+
+    [SOName('ENUM')]
+    FieldEnum: TSeekOrigin;
 
     [SOIgnore]
     UnusedField: string;
@@ -137,14 +144,16 @@ begin
   //S := JsonSerializer.Marshal<TDateTime>(D);
 
   // Fill TCustomRecord
-  D.DataTimeField1 := Now();
-  D.DataTimeField2 := D.DataTimeField1-1;
-  D.BooleanField := True;
+  D.FieldDT1 := Now();
+  D.FieldDT2 := D.FieldDT1-1;
+  D.FieldBool := True;
+  D.FieldSet := [csDesigning, csInline];
+  D.FieldEnum := soEnd;
   D.UnusedField := 'Unused';
 
   S := JsonSerializer.Marshal<TCustomRecord>(D);
 
-  Memo1.Text := S;
+  MMarshal.Text := S;
 end;
 
 procedure TForm1.BUnMarshalClick(Sender: TObject);
@@ -153,13 +162,15 @@ var
   //D: TDateTime;
   D: TCustomRecord;
 begin
-  S := Trim(Memo1.Text);
+  S := Trim(MMarshal.Text);
 
   //JsonSerializer.Unmarshal<TDateTime>(S, D);
 
-  D.DataTimeField1 := 0;
-  D.DataTimeField2 := 0;
-  D.BooleanField := False;
+  D.FieldDT1 := 0;
+  D.FieldDT2 := 0;
+  D.FieldBool := False;
+  D.FieldSet := [];
+  D.FieldEnum := soCurrent;
   D.UnusedField := 'Unused';
   JsonSerializer.Unmarshal<TCustomRecord>(S, D);
 
@@ -167,12 +178,15 @@ begin
   //S := 'date: "'+S+'"';
 
   S := '{'#13#10
-    +'  "DataTimeField2": "' + DelphiDateToISO8601(D.DataTimeField2) + '",'#13#10
-    +'  "DataTimeField1": "' + DelphiDateToISO8601(D.DataTimeField1) + '",'#13#10
-    +'  "BooleanField":   "' + CustomBooleanValues[D.BooleanField] + '"'#13#10
+    +'  "SET"     :"' + SuperSetToString(PTypeInfo(TypeInfo(TComponentState)), D.FieldSet, true) + '",'#13#10
+    +'  "DATE_2"  :"' + DelphiDateToISO8601(D.FieldDT2) + '",'#13#10
+    +'  "DATE_1"  :"' + DelphiDateToISO8601(D.FieldDT1) + '",'#13#10
+    +'  "ENUM"    :"' + {TypInfo.pas}GetEnumName(PTypeInfo(TypeInfo(TSeekOrigin)), Integer(D.FieldEnum)) + '",'#13#10
+    +'  "BOOL"    :"' + CustomBooleanValues[D.FieldBool] + '"'#13#10
   +'}';//}
 
-  ShowMessage(S);
+  //ShowMessage(S);
+  MUnMarshal.Text := S;
 end;
 
 initialization
