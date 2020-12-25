@@ -1,7 +1,7 @@
 ﻿# SuperObject.Delphi
 Pascal (Delphi, FPC) json parser library SuperObject.
 
-![](https://tokei.rs/b1/github/pult/SuperObject.Delphi?category=code) ![](https://tokei.rs/b1/github/pult/SuperObject.Delphi?category=files)
+![](https://tokei.rs/b1/github/pult/SuperObject.Delphi?category=code) ![](https://tokei.rs/b1/github/pult/SuperObject.Delphi?category=files) ![](https://img.shields.io/github/stars/pult/SuperObject.Delphi.svg) ![](https://img.shields.io/github/forks/pult/SuperObject.Delphi.svg) ![](https://img.shields.io/github/issues/pult/SuperObject.Delphi.svg)
 
 ### Changes
 
