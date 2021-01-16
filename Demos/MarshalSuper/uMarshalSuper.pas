@@ -1,3 +1,4 @@
+{ uMarshalSuper.pas } // version: 2021.0116.1923
 unit uMarshalSuper;
 
 {$IFDEF FPC}
@@ -82,9 +83,8 @@ var
   obj      : ISuperObject;
   sError   : string;
 begin
-  if @Data = nil then begin
-    Result := ''
-  end else begin
+  Result := ''; sError := '';
+  if @Data <> nil then begin
     ctxowned := False;
     ctx := SuperRttiContextDefault;
     if ctx = nil then begin
@@ -92,9 +92,17 @@ begin
       ctxowned := True;
     end;
     try
-      obj    := ctx.AsJson<T>(Data);
-      Result := string(obj.AsJSon( {indent:}True, {escape:}False ));
-      //Result := string( ISuperObject( ctx.AsJson<T>(Data) ).AsJSon);
+      obj := ctx.AsJson<T>(Data);
+      if Assigned(obj) then begin
+        Result := string(obj.AsJSon( {indent:}True, {escape:}False ));
+        //Result := string( ISuperObject( ctx.AsJson<T>(Data) ).AsJSon);
+      end else begin
+        sError := 'Failed json serialization (exists unhandled types)';
+        {$IFDEF MSWINDOWS}
+        OutputDebugString(PChar('ERROR: '+sError));
+        {$ENDIF}
+        //sError := '';
+      end;
     except
       on e: Exception do
       begin
@@ -103,13 +111,17 @@ begin
         OutputDebugString(PChar('EXCEPTION: '+e.ClassName+': '+sError));
         {$ENDIF}
         sError := #13#10+sError;
-        Result := '';
+        //Result := ''; { optional }
       end;
     end;
     if ctxowned then
       ctx.Free;
-    if (Result = '') then
-      raise EJsonSerializer.Create('JsonSerializer.Marshal: Empty'{+sError});
+    if (Result = '') then begin
+      if (sError <> '') then
+        raise EJsonSerializer.Create('JsonSerializer.Marshal: '+sError)
+      else
+        raise EJsonSerializer.Create('JsonSerializer.Marshal: Empty');
+    end;
   end;
 end;
 
