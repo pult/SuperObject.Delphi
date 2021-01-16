@@ -7,6 +7,7 @@ uses
   supertypes in '..\..\..\supertypes.pas',
   supertimezone in '..\..\..\supertimezone.pas',
   superdate in '..\..\..\superdate.pas',
+  //superdbg in '..\..\..\superdbg.pas',
   superobject in '..\..\..\superobject.pas';
 
 {$R *.res}

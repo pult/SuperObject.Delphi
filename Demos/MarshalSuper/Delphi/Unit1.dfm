@@ -67,4 +67,13 @@ object Form1: TForm1
     ParentFont = False
     TabOrder = 3
   end
+  object BMarshalUnMarshal: TButton
+    Left = 136
+    Top = 207
+    Width = 161
+    Height = 25
+    Caption = 'Marshal+UnMarshal'
+    TabOrder = 4
+    OnClick = BMarshalUnMarshalClick
+  end
 end
