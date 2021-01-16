@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2020.1217.0757
+{ superobject.pas } // version: 2021.0116.1915
 (*
  *                         Super Object Toolkit
  *
@@ -34,6 +34,7 @@
  *   + Fix bug on javadate functions + windows nt compatibility
  *   + Now you can force to parse only the canonical syntax of JSON using the stric parameter
  *   + Delphi 2010 RTTI marshalling
+ *   + Delphi 10.4 Sydney RTTI marshalling or "Managed Records"
  *
  *   . . .
  *)
@@ -241,7 +242,7 @@ uses
   ;
 
 const
-  SuperObjectVersion = 20201217;
+  SuperObjectVersion = 202101161915;
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
   {$EXTERNALSYM SuperObjectVerInfo}
@@ -253,7 +254,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 20201217}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202101161915}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -9100,7 +9101,7 @@ begin
     TValue.Make(@obj, TypeInfo(T), V);
     if index <> nil then
       Result := ToJson(V, index) else
-      Result := ToJson(V, so);
+      Result := ToJson(V, SO());
   finally
     EndRead(L);
   end;
@@ -9498,7 +9499,7 @@ begin
       begin
         Result := True;
         if Value.Kind <> tkClass then
-          Value := GetTypeData(ATypeInfo).ClassType.Create;
+          Value := GetTypeData(ATypeInfo).ClassType.Create; // @dbg: GetTypeData(ATypeInfo).ClassType.ClassName
         {$IFNDEF FPC} // FPC: Currently not supported rtti for Fields
         {+} // https://code.google.com/p/superobject/issues/detail?id=16
         //
@@ -9618,12 +9619,14 @@ var
   {$IFDEF USE_REFLECTION}
   LBasedType: PTypeInfo;
   {$ENDIF USE_REFLECTION}
+  //IsManaged: Boolean;
 {$ENDIF !FPC}
 begin
   {$IFDEF FPC} // FPC: Currently not supported rtti for Fields
   Result := False;
   {$ELSE !FPC}
   Result := True;
+  //IsManaged := {$if declared(tkMRecord)} (ATypeInfo <> nil) and (ATypeInfo^.Kind = tkMRecord) {$else} False {$ifend};
   TValue.Make(nil, ATypeInfo, Value);
   for LRttiField in Context.GetType(ATypeInfo).GetFields do
   begin
@@ -9983,7 +9986,7 @@ begin
     tkMethod: ;
     tkWChar:
       Result := jFromWideChar(ATypeInfo, obj, Value);
-    tkRecord:
+    tkRecord {$if declared(tkMRecord)},tkMRecord{$ifend}:
       Result := jFromRecord(ATypeInfo, obj, Value);
     tkPointer: ;
     tkInterface:
@@ -10376,11 +10379,13 @@ var
   LType, LTypeMap: PTypeInfo; LValueMap: TValue;
   {$ENDIF USE_REFLECTION}
   LObject: ISuperObject;
+  //IsManaged: Boolean;
 {$ENDIF !FPC}
 begin
   {$IFDEF FPC} // FPC rtti currently not supported TRttiType.GetFields
   Result := nil;
-  {$ELSE}
+  {$ELSE} //
+  //IsManaged := {$if declared(tkMRecord)} (Value.TypeInfo <> nil) and (Value.TypeInfo^.Kind = tkMRecord) {$else} False {$ifend};
   Result := TSuperObject.Create(stObject);
   for LField in Context.GetType(Value.TypeInfo).GetFields do begin
     {$IFDEF USE_REFLECTION} //@dbg: TRttiType(LField).Name
@@ -10558,7 +10563,7 @@ begin
       Result := jToEnumeration(Value, index);
     tkVariant:
       Result := jToVariant(Value, index);
-    tkRecord:
+    tkRecord {$if declared(tkMRecord)},tkMRecord{$ifend} :
       Result := jToRecord(Value, index);
     tkArray:
       Result := jToArray(Value, index);
