@@ -12,4 +12,5 @@ Pascal (Delphi, FPC) json parser library SuperObject.
   - Fix bug on javadate functions - windows nt compatibility
   - Now you can force to parse only the canonical syntax of JSON using the stric parameter
   - Delphi 2010 RTTI marshalling
+  - Delphi 10.4 Sydney RTTI marshalling or "Managed Records"
   - ...
