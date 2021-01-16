@@ -1,4 +1,4 @@
-{ superdbg.pas } // version: 2015.0727.0633
+{ superdbg.pas } // version: 2021.0116.1637
 unit superdbg;
 
 interface
@@ -38,8 +38,8 @@ uses
 
 const
   jcl_present: boolean = {$IFDEF _JCL_}true{$ELSE}false{$ENDIF};
-//var
-//  dbg_prefix: string = '#dbg:> ';
+var
+  dbg_prefix: string = 'dbg:> ';
 
 function GetExceptionStackList(AExceptionAddr: Pointer = nil): TStrings;
 function GetExceptionStack(AExceptionAddr: Pointer = nil): string;
