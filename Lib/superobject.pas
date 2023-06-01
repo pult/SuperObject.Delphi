@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2021.0116.1915
+{ superobject.pas } // version: 2023.0601.1600
 (*
  *                         Super Object Toolkit
  *
@@ -9915,18 +9915,18 @@ const soGUID: TGuid = '{4B86A9E3-E094-4E5A-954A-69048B7B6327}';
 var
   o: ISuperObject;
   {+}
-  {$IF defined(FPC) or (CompilerVersion >= 33.00)}  // DX 10.3 Rio Up
+  //{$IF defined(FPC) or (CompilerVersion >= 33.00)}  // DX 10.3 Rio Up
   AGuid: TGUID;
-  {$IFEND}
+  //{$IFEND}
   {+.}
 begin
   {+}
-  {$IF defined(FPC) or (CompilerVersion >= 33.00)}  // DX 10.3 Rio Up
+  //{$IF defined(FPC) or (CompilerVersion >= 33.00)}  // DX 10.3 Rio Up
   AGuid := GetTypeData(ATypeInfo).Guid;
   if CompareMem(@AGuid, @soGUID, SizeOf(TGUID)) then
-  {$ELSE}
-  if CompareMem(@GetTypeData(ATypeInfo).Guid, @soGUID, SizeOf(TGUID)) then
-  {$IFEND}
+  //{$ELSE}
+  //if CompareMem(@GetTypeData(ATypeInfo).Guid, @soGUID, SizeOf(TGUID)) then
+  //{$IFEND}
   {+.}
   begin
     if obj <> nil then
