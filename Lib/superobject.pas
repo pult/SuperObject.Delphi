@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2023.0601.1600
+{ superobject.pas } // version: 2023.0618.0130
 (*
  *                         Super Object Toolkit
  *
@@ -133,6 +133,9 @@ unit superobject;
     {$if CompilerVersion >= 17} // Delphi 2005
       {$define HAVE_INLINE}
     {$ifend}
+    {$IF CompilerVersion >= 22} // Delphi XE
+      {$define EXTENDED_RTTI}
+    {$IFEND}
     {$IF CompilerVersion >= 23} // XE2
       {$define HAVE_RTTI}
     {$ifend}
@@ -242,7 +245,7 @@ uses
   ;
 
 const
-  SuperObjectVersion = 202101161915;
+  SuperObjectVersion = 202306180130;
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
   {$EXTERNALSYM SuperObjectVerInfo}
@@ -254,7 +257,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202101161915}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202306180130}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -10677,6 +10680,17 @@ begin
 end;
 {$ENDIF HAVE_RTTI}
 
+{$IFDEF EXTENDED_RTTI}
+// To keep the RTTI Pool alive and avoid continuously creating/destroying it
+// See also https://stackoverflow.com/questions/27368556/trtticontext-multi-thread-issue
+var _RttiContext: TRttiContext;
+procedure _InitRttiPool();
+begin
+ _RttiContext := TRttiContext.Create;
+ _RttiContext.FindType('');
+end;
+{$ENDIF EXTENDED_RTTI}
+
 initialization
   {$IFDEF MSWINDOWS}
   SYS_ACP := GetACP();
@@ -10694,6 +10708,9 @@ initialization
   SOFormatSettings.ShortTimeFormat := 'hh:mm';
   SOFormatSettings.LongTimeFormat := 'hh:mm:ss';
   {$ENDIF}
+  {$IFDEF EXTENDED_RTTI}
+  _InitRttiPool();
+  {$ENDIF EXTENDED_RTTI}
   {$IFDEF HAVE_RTTI}
   SuperRttiContextClassDefault := TSuperRttiContext;
   SuperRttiContextDefault := SuperRttiContextClassDefault.Create;
@@ -10703,6 +10720,9 @@ finalization
   SuperRttiContextDefault.Free;
   SuperTypeInfoDictionary.Free;
   {$ENDIF HAVE_RTTI}
+  {$IFDEF EXTENDED_RTTI}
+  _RttiContext.Free;
+  {$ENDIF EXTENDED_RTTI}
   {$IFDEF DEBUG}
   Assert(debugcount = 0, 'Memory leak');
   {$ENDIF}
