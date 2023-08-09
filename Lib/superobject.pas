@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2023.0618.0130
+{ superobject.pas } // version: 2023.0809.0400
 (*
  *                         Super Object Toolkit
  *
@@ -100,6 +100,13 @@ unit superobject;
 {$IFNDEF FPC}{$IFDEF CONDITIONALEXPRESSIONS}
   {$IF CompilerVersion >= 24}
     {$LEGACYIFEND ON} // Allow old style mixed $endif $ifend
+
+    {$IF CompilerVersion >= 33.00} // 10.3 Rio
+      {$WARN UNSAFE_CAST OFF}                // W1048
+      {$WARN EXPLICIT_STRING_CAST OFF}       // W1059
+      {$WARN IMPLICIT_INTEGER_CAST_LOSS OFF} // W1071
+      {$WARN IMPLICIT_CONVERSION_LOSS OFF}   // W1072
+    {$IFEND}
   {$IFEND}
   //{$IF CompilerVersion >= 17.00} // Delphi 2005
   //  {$define HAVE_FOR_IN}

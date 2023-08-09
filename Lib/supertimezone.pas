@@ -1,4 +1,4 @@
-{ supertimezone.pas } // version: 2015.0727.0631
+{ supertimezone.pas } // version: 2023.0809.0400
 unit supertimezone;
 
 {+}
@@ -10,6 +10,10 @@ unit supertimezone;
 {$ELSE}{$IFDEF CONDITIONALEXPRESSIONS}
   {$IF CompilerVersion >= 24}
     {$LEGACYIFEND ON} // Allow old style mixed $endif $ifend
+
+    {$IF CompilerVersion >= 33.00} // 10.3 Rio
+      {$WARN IMPLICIT_CONVERSION_LOSS OFF} // W1072
+    {$IFEND}
   {$IFEND}
   {$IF CompilerVersion >= 17}
     {$DEFINE HAVE_INLINE}
