@@ -252,19 +252,21 @@ uses
   ;
 
 const
-  SuperObjectVersion = 202306180130;
+  SuperObjectVersion = 202308090400;
+  //         format : "yyyymmddhhnn"
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
   {$EXTERNALSYM SuperObjectVerInfo}
 
   // Sample for checking version of "superobject" library:
   // <sample>
+  (*
   {$IFDEF CONDITIONALEXPRESSIONS}{$define SOCONDEXPR}{$ELSE}
     {$IFDEF FPC}{$define SOCONDEXPR}{$ELSE}{$undef SOCONDEXPR}{$ENDIF}
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202306180130}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202308090400}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -272,6 +274,7 @@ const
   {$ELSE}
     //{$ifndef FPC}{$warn message_directive on}{$endif}{$MESSAGE WARN 'Cannot check version of "superobject" library'}
   {$ENDIF}
+  //*)
   // <\sample>
 
   SUPER_ARRAY_LIST_DEFAULT_SIZE = 32;
