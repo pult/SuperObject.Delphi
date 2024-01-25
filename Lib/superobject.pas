@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2023.0809.0400
+{ superobject.pas } // version: 2024.0125.2250
 (*
  *                         Super Object Toolkit
  *
@@ -252,7 +252,7 @@ uses
   ;
 
 const
-  SuperObjectVersion = 202308090400;
+  SuperObjectVersion = 202401252250;
   //         format : "yyyymmddhhnn"
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
@@ -266,7 +266,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202308090400}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202401252250}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -302,6 +302,11 @@ const  { not change values }
   CP_UNICODE = 1200;   // == CP_UTF16LE  - unicode codepage
   CP_DEFAULT = -1200;  // == -CP_UNICODE - default unicode codepage
   CP_UNKNOWN = -65001; // == -CP_UTF8
+
+  {$IFDEF USE_REFLECTION}
+  FieldsVisibilityDefault = [{mvPrivate, mvProtected,} mvPublic, mvPublished];
+  PropertiesVisibilityDefault = [mvPublished];
+  {$ENDIF}
 
 type
   {+}
@@ -1223,6 +1228,8 @@ type
     {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
     class function GetPropertyDefault(r: TRttiProperty; const obj: ISuperObject): ISuperObject;
     class function GetPropertyName(r: TRttiProperty): string;
+    class function GetFieldDefault(r: TRttiField; const obj: ISuperObject): ISuperObject;
+    class function GetFieldName(r: TRttiField): string;
     function Array2Class(const Value: TValue; const index: ISuperObject): TSuperObject;
     {$ENDIF USE_REFLECTION}
   protected // ToJson
@@ -1270,7 +1277,7 @@ type
     SerialFromJson: TDictionary<PTypeInfo, TSerialFromJson>;
     SerialToJson: TDictionary<PTypeInfo, TSerialToJson>;
     {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
-    FieldsVisibility: set of TMemberVisibility; // default: [mvPrivate, mvProtected, mvPublic, mvPublished]
+    FieldsVisibility: set of TMemberVisibility; // default: FieldsVisibilityDefault
     PropertiesVisibility: set of TMemberVisibility; // default: []
     {$ENDIF}
     SuperDateTimeZoneHandling: TSuperDateTimeZoneHandling; // default: sdzUTC
@@ -1282,6 +1289,7 @@ type
     function FromJson(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean; virtual;
     function ToJson(var Value: TValue; const index: ISuperObject = nil): ISuperObject; virtual;
     function AsType<T>(const obj: ISuperObject): T;
+    function AsTypeFromJson<T>(const json: string): T;
     function AsJson<T>(const obj: T; const index: ISuperObject = nil): ISuperObject;
 
     property ForceDefault: Boolean read FForceDefault write FForceDefault; // default True;
@@ -8839,8 +8847,8 @@ begin
 
   {+} // https://code.google.com/p/superobject/issues/detail?id=16
   {$IFDEF USE_REFLECTION}
-  FieldsVisibility := [mvPrivate, mvProtected, mvPublic, mvPublished];
-  PropertiesVisibility := [];
+  FieldsVisibility := FieldsVisibilityDefault;
+  PropertiesVisibility := PropertiesVisibilityDefault;
   {$ENDIF}
   {+.}
 end;
@@ -9062,17 +9070,14 @@ class function TSuperRttiContext.GetObjectDefault(r: TRttiObject; const obj: ISu
 var
   A: TCustomAttribute;
 begin
-  if not ObjectIsType(obj, stNull) then begin
-    Result := obj;
-    Exit;
-  end;
-  for A in r.GetAttributes do begin
-    if A.InheritsFrom(SODefault) then begin
-      Result := SO(SOString(SODefault(A).Name));
-      Exit;
-    end;
-  end;
   Result := obj;
+  if ObjectIsType(obj, stNull) then
+    for A in r.GetAttributes do begin
+      if A.InheritsFrom(SODefault) then begin
+        Result := SO(SOString(SODefault(A).Name));
+        Break;
+      end;
+    end;
 end;
 
 function TSuperRttiContext.AsType<T>(const obj: ISuperObject): T;
@@ -9082,7 +9087,7 @@ var
 begin
   BeginWrite(@obj, {%H-}L);
   try
-    ret:= TValue.Empty; // https://code.google.com/p/superobject/issues/detail?id=53
+    ret := TValue.Empty; // https://code.google.com/p/superobject/issues/detail?id=53
     if FromJson(TypeInfo(T), obj, ret) then begin
       {$IFDEF FPC}
       ret.ExtractRawData(@Result);
@@ -9102,6 +9107,14 @@ begin
   finally
     EndWrite(L);
   end;
+end;
+
+function TSuperRttiContext.AsTypeFromJson<T>(const json: string): T;
+var
+  obj: ISuperObject;
+begin
+  obj := SO(json);
+  Result := AsType<T>(obj);
 end;
 
 function TSuperRttiContext.AsJson<T>(const obj: T; const index: ISuperObject = nil): ISuperObject;
@@ -9488,31 +9501,72 @@ end;
 
 function TSuperRttiContext.jFromClass(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean;
 var
+  AObjectType: TSuperType;
+  AClassType: TClass;
   {$IFNDEF FPC}
   LRttiField: {$IFDEF FPC}TRttiMember{$ELSE}TRttiField{$ENDIF};
   {$ENDIF}
+  LTypeInfo: PTypeInfo;
+  LTypeKind: TTypeKind;
   LValue: TValue;
   {+} // https://code.google.com/p/superobject/issues/detail?id=39
   LArrObj: {+}ISuperArray{+.};
   i: Integer;
   AMethod: TRttiMethod;
   {+.}
-  {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
-  LRttiProp: TRttiProperty;
-  {$ENDIF}
-  LTypeInfo: PTypeInfo;
-  {$IFDEF USE_REFLECTION}
-  LBasedType: PTypeInfo;
-  {$ENDIF}
+  OK: Boolean;
   LValObj: ISuperObject;
   LRttiType: TRttiType;
+  {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
+  LRttiProp: TRttiProperty;
+  LBasedType: PTypeInfo;
+  SFieldName: string;
+  SValue: string;
+  function so_get_field_obj({$IFDEF USE_REFLECTION}AsProperty: Boolean = False{$ENDIF}): ISuperObject;
+  begin
+    Result := obj.O[SFieldName];
+    {$IFDEF EXTEND_FORIN}
+    if Assigned(Result) and Result.JsonIsEmpty then
+      Result := nil;
+    {$ENDIF}
+    //-if Assigned(Result) and (Result.DataType = stArray) then
+    //-  LArrObj := obj.A[SFieldName];
+    if (Result = nil) or ( Assigned(Result) and (Result.DataType = stNull) ) then begin
+      {$IFDEF USE_REFLECTION}
+      if AsProperty then
+        Result := GetPropertyDefault(LRttiProp, Result)
+      else
+      {$ENDIF}
+      begin
+        case AObjectType of
+          stObject:
+            case LTypeKind of
+              tkClass:
+                Result := GetObjectDefault(LRttiField, Result);
+              else
+                Result := GetFieldDefault(LRttiField, Result);
+            end;
+        end;
+      end;
+    end;
+  end;
+  {$ENDIF USE_REFLECTION}
 begin
-  case ObjectGetType(obj) of
+  if (ATypeInfo = nil) or (obj = nil) then begin
+    Result := False;
+    Exit;
+  end;
+  Result := True;
+  if obj.JsonIsEmpty then
+    Exit;
+  AObjectType := ObjectGetType(obj);
+  case AObjectType of
     stObject:
       begin
-        Result := True;
-        if Value.Kind <> tkClass then
-          Value := GetTypeData(ATypeInfo).ClassType.Create; // @dbg: GetTypeData(ATypeInfo).ClassType.ClassName
+        if Value.Kind <> tkClass then begin
+          AClassType := GetTypeData(ATypeInfo).ClassType;
+          Value := AClassType.Create; // @dbg: GetTypeData(ATypeInfo).ClassType.ClassName
+        end;
         {$IFNDEF FPC} // FPC: Currently not supported rtti for Fields
         {+} // https://code.google.com/p/superobject/issues/detail?id=16
         //
@@ -9530,25 +9584,196 @@ begin
           begin
             LValue := TValue.Empty;
             LTypeInfo := LRttiField.FieldType.Handle;
-            {$IFDEF USE_REFLECTION}
-            if FForceTypeMap then begin
-              LBasedType := GetObjectTypeInfo(LRttiField, LTypeInfo);
-              if (LTypeInfo <> LBasedType) and (LTypeInfo.Kind = LBasedType.Kind) then
-                LTypeInfo := LBasedType;
-            end;
-            {$ENDIF USE_REFLECTION}
-            LValObj := obj.AsObject[GetObjectName(LRttiField)];
-            LValObj := GetObjectDefault(LRttiField, LValObj);
-            Result := FromJson(LTypeInfo, LValObj, LValue);
-            if Result then
-            {+} // https://code.google.com/p/superobject/issues/detail?id=64
-              LRttiField.SetValue(Value.AsObject, LValue)
-            else if ForceSerializer then
-              Result := True
-            else
-            {+.}
-              Exit; // error
-          end;
+            if LTypeInfo = nil then
+              Continue;
+            LTypeKind := LTypeInfo^.Kind;
+            {%H-}case LTypeKind of
+              tkClass: begin
+                {$IFDEF USE_REFLECTION}
+                if FForceTypeMap then begin
+                  LBasedType := GetObjectTypeInfo(LRttiField, LTypeInfo);
+                  if (LTypeInfo <> LBasedType) and (LTypeKind = LBasedType.Kind) then
+                    LTypeInfo := LBasedType;
+                end;
+                {$ENDIF USE_REFLECTION}
+                SFieldName := GetObjectName(LRttiField);
+                //-? LValObj := obj.AsObject[SFieldName];
+                //-  LValObj := GetObjectDefault(LRttiField, LValObj);
+                LValObj := so_get_field_obj();
+                {+} // https://code.google.com/p/superobject/issues/detail?id=64
+                OK := FromJson(LTypeInfo, LValObj, LValue);
+                if OK then
+                  LRttiField.SetValue(Value.AsObject, LValue);
+                //-else if not ForceSerializer then
+                //-  Exit(False); // error
+                {+.}
+              end;
+              tkClassRef: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  if LValObj.DataType = stObject then begin
+                    OK := jFromClassRef(LTypeInfo, LValObj, LValue);
+                    if OK then
+                      LRttiField.SetValue(Value.AsObject, LValue);
+                  end;
+                end;
+              end;
+              tkRecord {$if declared(tkMRecord)},tkMRecord{$ifend}: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  if LValObj.DataType = stNull then
+                    LRttiField.SetValue(Value.AsObject, LValue)
+                  else if LValObj.DataType = stObject then begin
+                    OK := jFromRecord(LTypeInfo, LValObj, LValue);
+                    if OK then
+                      LRttiField.SetValue(Value.AsObject, LValue);
+                  end;
+                end;
+              end;
+              tkString, tkLString, tkUString, tkWString: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) and (LValObj.DataType in [stNull .. stInt, stString]) then begin
+                  SValue := LValObj.AsString;
+                  LRttiField.SetValue(Value.AsObject, SValue);
+                end;
+              end;
+              {tkChar, tkWChar: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) and (LValObj.DataType in [stNull .. stInt, stString]) then begin
+                  SValue := LValObj.AsString;
+                  if Length(SValue) > 0 then
+                    LRttiField.SetValue(Value.AsObject, SValue[1]);
+                end;
+              end;}
+              tkChar: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  OK := jFromChar(LTypeInfo, LValObj, LValue);
+                  if OK then
+                    LRttiField.SetValue(Value.AsObject, LValue);
+                end;
+              end;
+              tkWChar: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  OK := jFromWideChar(LTypeInfo, LValObj, LValue);
+                  if OK then
+                    LRttiField.SetValue(Value.AsObject, LValue);
+                end;
+              end;
+              {tkInteger, tkInt64: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  if LValObj.DataType = stNull then
+                    LRttiField.SetValue(Value.AsObject, 0)
+                  else if LValObj.DataType in [stDouble, stCurrency, stInt] then
+                    LRttiField.SetValue(Value.AsObject, LValObj.AsInteger);
+                end;
+              end;}
+              tkInteger: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  OK := jFromInt(LTypeInfo, LValObj, LValue);
+                  if OK then
+                    LRttiField.SetValue(Value.AsObject, LValue);
+                end;
+              end;
+              tkInt64: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  OK := jFromInt64(LTypeInfo, LValObj, LValue);
+                  if OK then
+                    LRttiField.SetValue(Value.AsObject, LValue);
+                end;
+              end;
+              tkFloat: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  {if LValObj.DataType = stNull then
+                    LRttiField.SetValue(Value.AsObject, 0)
+                  else if LValObj.DataType in [stDouble, stCurrency, stInt] then
+                    LRttiField.SetValue(Value.AsObject, LValObj.AsDouble);}
+                  OK := jFromFloat(LTypeInfo, LValObj, LValue);
+                  if OK then
+                    LRttiField.SetValue(Value.AsObject, LValue);
+                end;
+              end;
+              tkSet: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  OK := jFromSet(LTypeInfo, LValObj, LValue);
+                  if OK then
+                    LRttiField.SetValue(Value.AsObject, LValue);
+                end;
+              end;
+              tkEnumeration: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  OK := jFromEnumeration(LTypeInfo, LValObj, LValue);
+                  if OK then
+                    LRttiField.SetValue(Value.AsObject, LValue);
+                end;
+              end;
+              tkArray: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  if LValObj.DataType = stNull then
+                    LRttiField.SetValue(Value.AsObject, LValue)
+                  else if LValObj.DataType = stArray then begin
+                    OK := jFromArray(LTypeInfo, LValObj, LValue);
+                    if OK then
+                      LRttiField.SetValue(Value.AsObject, LValue);
+                  end;
+                end;
+              end;
+              tkDynArray: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  if LValObj.DataType = stNull then
+                    LRttiField.SetValue(Value.AsObject, LValue)
+                  else if LValObj.DataType = stArray then begin
+                    OK := jFromDynArray(LTypeInfo, LValObj, LValue);
+                    if OK then
+                      LRttiField.SetValue(Value.AsObject, LValue);
+                  end;
+                end;
+              end;
+              tkInterface: begin
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  OK := jFromInterface(LTypeInfo, LValObj, LValue);
+                  if OK then
+                    LRttiField.SetValue(Value.AsObject, LValue);
+                end;
+              end;
+              tkMethod: ;
+              else begin
+                //-Exit(False); // error
+                SFieldName := GetFieldName(LRttiField);
+                LValObj := so_get_field_obj();
+                if Assigned(LValObj) then begin
+                  OK := jFromUnknown(LTypeInfo, LValObj, LValue);
+                  if OK then
+                    LRttiField.SetValue(Value.AsObject, LValue);
+                end;
+              end;
+            end; // case
+          end; // if
         end; // for
         {$ENDIF !FPC}
         {+} // https://code.google.com/p/superobject/issues/detail?id=16
@@ -9562,61 +9787,68 @@ begin
             and (LRttiProp.IsWritable)
             and (LRttiProp.GetCustomAttribute<SOIgnore> = nil) then
           begin
-            LValObj := obj.AsObject[SOString(GetPropertyName(LRttiProp))];
-            LValObj := GetPropertyDefault(LRttiProp, LValObj);
+            LValue := TValue.Empty;
             LTypeInfo := LRttiProp.PropertyType.Handle;
+            LTypeKind := LTypeInfo^.Kind;
             if FForceTypeMap then begin
               LBasedType := GetObjectTypeInfo(LRttiProp, LTypeInfo);
-              if (LTypeInfo <> LBasedType) and (LTypeInfo.Kind = LBasedType.Kind) then
+              if (LTypeInfo <> LBasedType) and (LTypeKind = LBasedType.Kind) then
                 LTypeInfo := LBasedType;
             end;
-            LValue := TValue.Empty;
-            Result := FromJson(LTypeInfo, LValObj, LValue);
-            if Result then
-              LRttiProp.SetValue(Value.AsObject, LValue)
-            else if ForceSerializer then
-              Result := True
-            else
-              Exit; // error
+            SFieldName := GetPropertyName(LRttiProp);
+            //-? LValObj := obj.AsObject[SOString(SFieldName)];
+            //-  LValObj := GetPropertyDefault(LRttiProp, LValObj);
+            LValObj := so_get_field_obj({AsProperty:}True);
+            if Assigned(LValObj) then begin
+              if LValObj.DataType = stNull then
+                LRttiProp.SetValue(Value.AsObject, LValue)
+              else begin
+                OK := FromJson(LTypeInfo, LValObj, LValue);
+                if OK then
+                  LRttiProp.SetValue(Value.AsObject, LValue);
+                //-else if not ForceSerializer then
+                //-  Exit(False); // error
+              end;
+            end;
           end;
         end; // for
         {$ENDIF USE_REFLECTION}
         {+.}
-      end;
+      end; // stObject
     {+} // https://code.google.com/p/superobject/issues/detail?id=39
     stArray:
       begin
-        Result := False;
-        if IsList(Context, ATypeInfo) and IsGenericType(ATypeInfo) then begin
+        OK := obj.DataType = stArray;
+        if OK then begin
+          LArrObj := obj.AsArray;
+          OK := LArrObj.Length > 0;
+        end;
+        if OK and IsList(Context, ATypeInfo) and IsGenericType(ATypeInfo) then begin
           if Value.Kind <> tkClass then
             Value := GetTypeData(ATypeInfo).ClassType.Create;
           AMethod := Context.GetType(Value.AsObject.ClassType).GetMethod('Add');
-          Result := Assigned(AMethod); // True;
-          if Result then begin
-            LArrObj := obj.AsArray;
+          OK := Assigned(AMethod); // True;
+          if OK then begin
             for i := 0 to LArrObj.Length-1 do begin
               LValue := TValue.Empty;
               LRttiType := GetDeclaredGenericType(Context, ATypeInfo);
               LTypeInfo := LRttiType.Handle;
-              Result := FromJson(LTypeInfo, LArrObj[i], LValue);
-              if Result then
-                AMethod.Invoke(Value.AsObject, [LValue])
-              else
-                Exit; // error
+              OK := FromJson(LTypeInfo, LArrObj[i], LValue);
+              if OK then
+                AMethod.Invoke(Value.AsObject, [LValue]);
+              //-else
+              //-  Exit(False); // error
             end; // for
           end;
         end;
-      end;
+      end; // stArray
     {+.}
-    stNull:
-      begin
+    stNull: begin
         Value := nil;
-        Result := True;
       end
     else begin
-        // error
         Value := nil;
-        Result := False;
+        //-Result := False; // error
       end;
   end; // case
 end; // function TSuperRttiContext.jFromClass
@@ -10029,6 +10261,27 @@ begin
 end;
 //
 class function TSuperRttiContext.GetPropertyName(r: TRttiProperty): string;
+var
+  o: TCustomAttribute;
+begin
+  for o in r.GetAttributes do
+    if o is SOName then
+      Exit(SOName(o).Name);
+  Result := r.Name;
+end;
+//
+class function TSuperRttiContext.GetFieldDefault(r: TRttiField; const obj: ISuperObject): ISuperObject;
+var
+  o: TCustomAttribute;
+begin
+  if not ObjectIsType(obj, stNull) then Exit(obj);
+  for o in r.GetAttributes do
+    if o is SODefault then
+      Exit(SO(SOString(SODefault(o).Name)));
+  Result := obj;
+end;
+//
+class function TSuperRttiContext.GetFieldName(r: TRttiField): string;
 var
   o: TCustomAttribute;
 begin
