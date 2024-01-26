@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2024.0126.1200
+{ superobject.pas } // version: 2024.0126.1230
 (*
  *                         Super Object Toolkit
  *
@@ -252,7 +252,7 @@ uses
   ;
 
 const
-  SuperObjectVersion = 202401261200;
+  SuperObjectVersion = 202401261230;
   //#        format : "yyyymmddhhnn"
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
@@ -266,7 +266,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202401261200}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202401261230}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -1225,11 +1225,11 @@ type
     function GetObjectTypeInfo(aType: PTypeInfo): PTypeInfo; overload;
     class function GetObjectName(r: TRttiNamedObject): string;
     class function GetObjectDefault(r: TRttiObject; const obj: ISuperObject): ISuperObject;
+    class function GetFieldName(r: TRttiField): string;
+    class function GetFieldDefault(r: TRttiField; const obj: ISuperObject): ISuperObject;
     {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
     class function GetPropertyDefault(r: TRttiProperty; const obj: ISuperObject): ISuperObject;
     class function GetPropertyName(r: TRttiProperty): string;
-    class function GetFieldDefault(r: TRttiField; const obj: ISuperObject): ISuperObject;
-    class function GetFieldName(r: TRttiField): string;
     function Array2Class(const Value: TValue; const index: ISuperObject): TSuperObject;
     {$ENDIF USE_REFLECTION}
   protected // ToJson
@@ -9065,7 +9065,7 @@ begin
   end;
   Result := r.Name;
 end;
-
+//
 class function TSuperRttiContext.GetObjectDefault(r: TRttiObject; const obj: ISuperObject): ISuperObject;
 var
   A: TCustomAttribute;
@@ -9080,6 +9080,33 @@ begin
     end;
 end;
 
+class function TSuperRttiContext.GetFieldName(r: TRttiField): string;
+var
+  A: TCustomAttribute;
+begin
+  for A in r.GetAttributes do begin
+    if A.InheritsFrom(SOName) then begin
+      Result := SOName(A).Name;
+      Exit;
+    end
+  end;
+  Result := r.Name;
+end;
+
+class function TSuperRttiContext.GetFieldDefault(r: TRttiField; const obj: ISuperObject): ISuperObject;
+var
+  A: TCustomAttribute;
+begin
+  Result := obj;
+  if ObjectIsType(obj, stNull) then
+    for A in r.GetAttributes do begin
+      if A.InheritsFrom(SODefault) then begin
+        Result := SO(SOString(SODefault(A).Name));
+        Break;
+      end;
+    end;
+end;
+//
 function TSuperRttiContext.AsType<T>(const obj: ISuperObject): T;
 var
   L: TMREWSyncHandle;
@@ -9517,11 +9544,12 @@ var
   OK: Boolean;
   LValObj: ISuperObject;
   LRttiType: TRttiType;
+  SFieldName: string;
+  SValue: string;
   {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
   LRttiProp: TRttiProperty;
   LBasedType: PTypeInfo;
-  SFieldName: string;
-  SValue: string;
+  {$ENDIF USE_REFLECTION}
   function so_get_field_obj({$IFDEF USE_REFLECTION}AsProperty: Boolean = False{$ENDIF}): ISuperObject;
   begin
     Result := obj.O[SFieldName];
@@ -9550,7 +9578,6 @@ var
       end;
     end;
   end;
-  {$ENDIF USE_REFLECTION}
 begin
   if (ATypeInfo = nil) or (obj = nil) then begin
     Result := False;
@@ -9569,9 +9596,9 @@ begin
         end;
         {$IFNDEF FPC} // FPC: Currently not supported rtti for Fields
         {+} // https://code.google.com/p/superobject/issues/detail?id=16
-        //
-        // FIELDS:
-        //
+        //#
+        //# FIELDS:
+        //#
         {$IFDEF USE_REFLECTION}
         if FieldsVisibility <> [] then
         {$ENDIF}
@@ -9778,9 +9805,9 @@ begin
         {$ENDIF !FPC}
         {+} // https://code.google.com/p/superobject/issues/detail?id=16
         {$IFDEF USE_REFLECTION}
-        //
-        // PROPERTIES:
-        //
+        //#
+        //# PROPERTIES:
+        //#
         if PropertiesVisibility <> [] then
         for LRttiProp in Context.GetType(Value.AsObject.ClassType).GetProperties do begin
           if (LRttiProp.PropertyType <> nil) and (LRttiProp.Visibility in PropertiesVisibility)
@@ -10269,27 +10296,6 @@ begin
       Exit(SOName(o).Name);
   Result := r.Name;
 end;
-//
-class function TSuperRttiContext.GetFieldDefault(r: TRttiField; const obj: ISuperObject): ISuperObject;
-var
-  o: TCustomAttribute;
-begin
-  if not ObjectIsType(obj, stNull) then Exit(obj);
-  for o in r.GetAttributes do
-    if o is SODefault then
-      Exit(SO(SOString(SODefault(o).Name)));
-  Result := obj;
-end;
-//
-class function TSuperRttiContext.GetFieldName(r: TRttiField): string;
-var
-  o: TCustomAttribute;
-begin
-  for o in r.GetAttributes do
-    if o is SOName then
-      Exit(SOName(o).Name);
-  Result := r.Name;
-end;
 
 function TSuperRttiContext.Array2Class(const Value: TValue; const index: ISuperObject): TSuperObject;
 var
@@ -10455,10 +10461,10 @@ begin
     Exit;
   Result := TSuperObject.Create(stObject);
   index[SOString(IntToStr(NativeInt(Value.AsObject)))] := Result;
-  t := nil;
-  //
-  // FIELDS:
-  //
+  t := nil; {$IFNDEF USE_REFLECTION} if Assigned(t) then; {$ENDIF}
+  //#
+  //# FIELDS:
+  //#
   {+} // https://code.google.com/p/superobject/issues/detail?id=16
   {$IFNDEF FPC} // FPC rtti currently not supported TRttiType.GetFields
   {$IFDEF USE_REFLECTION}
@@ -10513,9 +10519,9 @@ begin
   end; // if FieldsVisibility
   {$ENDIF !FPC}
   {+}
-  //
-  // PROPERTIES:
-  //
+  //#
+  //# PROPERTIES:
+  //#
   {$IFDEF USE_REFLECTION}
   if (PropertiesVisibility <> []) then begin
     if t = nil then
