@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2024.0126.1230
+{ superobject.pas } // version: 2024.0126.1310
 (*
  *                         Super Object Toolkit
  *
@@ -36,7 +36,7 @@
  *   + Delphi 2010 RTTI marshalling
  *   + Delphi 10.4 Sydney RTTI marshalling of "Managed Records"
  *
- *   . . .
+ *
  *)
 
 {$IFDEF FPC}
@@ -52,7 +52,7 @@
 (*
 
 *
-* TODO: need check/fix issues:
+* #TODO: need check/fix issues:
 *
    - Parsing ShortStrings
      https://code.google.com/p/superobject/issues/detail?id=56
@@ -147,7 +147,7 @@ unit superobject;
       {$define HAVE_RTTI}
     {$ifend}
     {$if CompilerVersion > 18} // Delphi 2007 Up (18.50)
-      {$define NEED_FORMATSETTINGS} // TODO: check for prev versions
+      {$define NEED_FORMATSETTINGS} //#TODO: check for prev versions
     {$ifend}
   {$ENDIF}
   {$IFDEF UNICODE}
@@ -171,7 +171,7 @@ unit superobject;
 //   for item in (TSuperObject.ParseFile('123-empty.json', true, true) as ISuperObject)['stroka'] do ...
 // ---
 {$undef EXTEND_FORIN}
-{$define EXTEND_FORIN} { optional } // TODO: "pult": need check any combination
+{$define EXTEND_FORIN} { optional } //#TODO: "pult": need check any combination
 {+.}
 //
 {+}
@@ -252,7 +252,7 @@ uses
   ;
 
 const
-  SuperObjectVersion = 202401261230;
+  SuperObjectVersion = 202401261310;
   //#        format : "yyyymmddhhnn"
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
@@ -266,7 +266,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202401261230}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202401261310}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -633,7 +633,7 @@ type
   end;
 
 (*
-  //TODO: TSuperOEMWriterStream - console codepage stream writer
+  //#TODO: TSuperOEMWriterStream - console codepage stream writer
   //TSuperUTF8WriterStream = class(TSuperWriterStream)
   //TMBCSEncoding TSuperMBCSEncodingiWriterStream
   TSuperMBCSEncodingiWriterStream = class(TSuperWriterStream)
@@ -663,7 +663,7 @@ type
     FSocket: longint;
     FSize: Integer;
     {+}
-    //TODO: add constructor parameter escaped data
+    //#TODO: add constructor parameter escaped data
     FEscaped: boolean;
     function SendBuffer(buf: Pointer; size: Integer): Integer; {$IFDEF HAVE_INLINE}inline;{$ENDIF}
     {+.}
@@ -915,7 +915,7 @@ type
     // validate methods
     function Validate(const rules: SOString; const defs: SOString = ''; callback: TSuperOnValidateError = nil; sender: Pointer = nil): boolean; overload;
     function Validate(const rules: ISuperObject; const defs: ISuperObject = nil; callback: TSuperOnValidateError = nil; sender: Pointer = nil): boolean; overload;
-    {+} // TODO: sample: https://github.com/hgourvest/superobject/blob/master/tests/test_validate.dpr
+    {+} //#TODO: sample: https://github.com/hgourvest/superobject/blob/master/tests/test_validate.dpr
     function ValidateCB(const rules: ISuperObject; const defs: ISuperObject = nil; callback: TSuperValidatorCB = nil): boolean; overload;
     function ValidateCB(const rules: SOString; const defs: SOString = ''; callback: TSuperValidatorCB = nil): boolean; overload;
     {+.}
@@ -1474,7 +1474,7 @@ uses
 const
   dbg_prefix = 'dbg:> ';
 //
-{$IFDEF MSWINDOWS}{$IF (not defined(FPC)) and (CompilerVersion < 23)} // Less then Delphi XE2. TODO: check console output for XE2 (CompilerVersion==23)
+{$IFDEF MSWINDOWS}{$IF (not defined(FPC)) and (CompilerVersion < 23)} // Less then Delphi XE2 //#TODO: check console output for XE2 (CompilerVersion=23)
 function AnsiToOEM(const S: AnsiString): AnsiString; overload; begin
   SetLength(Result, Length(S));
   if Length(S) > 0 then
@@ -1495,7 +1495,7 @@ begin
   ));
   {$warnings on}
   {$ENDIF}
-  if IsConsole then // TODO: write to stderror
+  if IsConsole then //#TODO: write to stderror
     writeln({$IFDEF MSWINDOWS}{$IF (not defined(FPC)) and (CompilerVersion < 23)}AnsiToOEM{$IFEND}{$ENDIF}(s));
 end;
 //
@@ -1510,7 +1510,7 @@ begin
   ));
   {$warnings on}
   {$ENDIF}
-  if IsConsole then // TODO: write to stderror
+  if IsConsole then //#TODO: write to stderror
     writeln({$IFDEF MSWINDOWS}{$IF (not defined(FPC)) and (CompilerVersion < 23)}AnsiToOEM{$IFEND}{$ENDIF}(s));
 end;
 {$ENDIF}
@@ -1907,7 +1907,7 @@ begin
         if TVarRec(Args[j]).VPointer = nil then
           Add(nil) else
           {$hints off} // FPC: Hint: Conversion between ordinals and pointers is not portable
-          Add(TSuperObject.Create(PtrUInt(TVarRec(Args[j]).VPointer))); // TODO: ? which of the overloaded constructors ?
+          Add(TSuperObject.Create(PtrUInt(TVarRec(Args[j]).VPointer))); //#TODO: ? which of the overloaded constructors ?
           {$hints on}
 {$if declared(vtUnicodeString)}
       vtUnicodeString:
@@ -2188,7 +2188,7 @@ redo:
             }
             Uuid^.D1 := (Uuid^.D1 * 16) + hex2bin[Byte(p^)];
             //
-            // TODO: ? FPC 2.5.1: https://code.google.com/p/superobject/issues/detail?id=18
+            //#TODO: ? FPC 2.5.1: https://code.google.com/p/superobject/issues/detail?id=18
             //       ? TUUID(Uuid^).guid.D1 := (TUUID(Uuid^).guid.D1 * 16) + hex2bin[p^];
             //
             {+.}
@@ -2790,7 +2790,7 @@ var
 {$ENDIF !FPC}
 begin
   Result := nil;
-  {$IFDEF FPC} // TODO: FPC currently not supported
+  {$IFDEF FPC} //#TODO: FPC currently not supported
     Exit;
   {$ELSE !FPC}
   {+}
@@ -2808,7 +2808,7 @@ begin
     if endPos > 0 then
     begin
       vTypeName := Copy(vTypeName, startPos + 1, endPos - Succ(startPos));
-      Result := RttiContext.FindType(vTypeName); // TODO: FPC currently not supported
+      Result := RttiContext.FindType(vTypeName); //#TODO: FPC currently not supported
     end;
   end;
   {+.}
@@ -3526,7 +3526,7 @@ begin
 end;
 type
   {$IF (not defined(FPC)) and (CompilerVersion<=21)} // Less then XE
-  TMBCSEncodingH = class(TEncoding) //TODO: move to private section
+  TMBCSEncodingH = class(TEncoding) //#TODO: move to private section
   private
     FCodePage: Cardinal;
   end;
@@ -3948,7 +3948,7 @@ begin
   {$ELSE !USE_TENCODING}
   {$IFNDEF MSWINDOWS} // FPC, Kylix:
   p.size := Utf8ToUnicode(PWideChar(p.bufferW), p.size+1, PAnsiChar(p.bufferA), p.size)-1;
-// TODO: ... implement read extra bytes
+//#TODO: ... implement read extra bytes
 //    {$MESSAGE FATAL 'TODO: BufferDecoderUTF8 - not implemented read extra bytes'}
     {$MESSAGE WARN 'TODO: BufferDecoderUTF8 - not implemented read extra bytes'}
   {$ELSE MSWINDOWS}
@@ -4069,14 +4069,14 @@ begin // dbg: pansichar(p.bufferA)
   p.size := iLen;
   {$ELSE !UNICODE}
   {$IFNDEF MSWINDOWS}// FPC, Kylix:
-    //TODO: POSIX, UNIX
+    //#TODO: POSIX, UNIX
 
     //ERROR: 'platform not supported'
 
     //{.$MESSAGE FATAL 'PLATFORM NOT SUPPORTED'}
     //{$MESSAGE WARN 'TODO: Not supported charset convertion by codepage'}
 
-// TODO: ... implement read extra bytes
+//#TODO: ... implement read extra bytes
 //    {$MESSAGE FATAL 'TODO: BufferDecoderByCP - not implemented read extra bytes'}
     {$MESSAGE WARN 'TODO: BufferDecoderByCP - not implemented read extra bytes'}
 
@@ -4255,7 +4255,7 @@ begin
   dbg('#,codepa2ge='+inttostr(p.codepage));
   {$ENDIF}//*)
 
-//TODO: UTF32
+//#TODO: UTF32
     if (bom[0] = 0) and (bom[1] = 0)  // like "UTF-32 ..."
       or ( (bomLen=4) and (bom[2] = 0) and (bom[3] = 0) ) then begin // dbg: pwidechar(bom)
       // ? when: ( (not p.enc.IsSingleByte) and (p.enc.GetMaxByteCount(0) > 2) )
@@ -4286,8 +4286,8 @@ begin
           else
             p.CharMaxByteCount := 4;
           pBufferDecoder := TBufferDecoderProc(@BufferDecoderUTF8);
-//TODO: switch to "BufferDecoderByCP":
-          //pBufferDecoder := TBufferDecoderProc(@BufferDecoderByCP);
+//#TODO: switch to "BufferDecoderByCP":
+          //# pBufferDecoder := TBufferDecoderProc(@BufferDecoderByCP);
           //
           if (len > 0) and (len < p.CharMaxByteCount) then begin
             p.size := (p.CharMaxByteCount - len);
@@ -4403,7 +4403,7 @@ begin
       {$warnings off}
       raise ESuperObject.Create('JSON Syntax error at offset: '+inttostr(tok.char_offset));
       {$warnings on}
-    {$IFDEF EXTEND_FORIN} // TODO: "pult": need check any combination
+    {$IFDEF EXTEND_FORIN} //#TODO: "pult": need check any combination
     // Always return value !
     // Allow next code (without nil checking):
     // ----- ----- ----- sample : ----- ----- -----
@@ -5375,7 +5375,7 @@ redo_char:
                 TokRec^.current := athis.AsArray.Delete(numi) else
                 TokRec^.current := athis.AsArray.GetO(numi);
             end else begin
-              {+} // pult: 2020.1217.0757
+              {+} // pult: 2020-12-17
               if (code > 0) then begin
                 TokRec^.state := tsString;
                 goto redo_char;
@@ -5398,7 +5398,7 @@ redo_char:
               end;
               p^ := #0;
               val(tok.pb.FBuf, numi, code);
-              {+} // pult: 2020.1217.0757
+              {+} // pult: 2020-12-17
               if (code > 0) then begin
                 TokRec^.state := tsString;
                 goto redo_char;
@@ -5414,7 +5414,7 @@ redo_char:
             end else
             begin
               val(tok.pb.FBuf, numd, code);
-              {+} // pult: 2020.1217.0757
+              {+} // pult: 2020-12-17
               if (code > 0) then begin
                 TokRec^.state := tsString;
                 goto redo_char;
@@ -5698,7 +5698,7 @@ begin
         begin
           //case codepage of 0, CP_UNICODE, CP_DEFAULT:; else if (codepage <> SYS_ACP) and (codepage <> -SYS_ACP) then
           //  raise ESuperObject.Create('Unsupported codepage'); end;
-          // TODO: use WideCharToMultiByte for others charsets. TSuperMBCSEncodingiWriterStream
+          //#TODO: use WideCharToMultiByte for others charsets. TSuperMBCSEncodingiWriterStream
           pb := TSuperUnicodeWriterStream.Create(stream);
             if writebom and (codepage > 0) then begin
             w := $0000FEFF;
@@ -6045,7 +6045,7 @@ var
 begin
   Result := ParseString(PSOChar(path), False, True, Self);
   {+}
-  {$IFDEF EXTEND_FORIN} // TODO: "pult": need check any combination
+  {$IFDEF EXTEND_FORIN} //#TODO: "pult": need check any combination
   // Always return value !
   // Allow next code: for item in (TSuperObject.ParseFile('123-empty.json', true, true) as ISuperObject)['stroka'] do ...
   if (Result = nil) and FSafeForIn then
@@ -6073,7 +6073,7 @@ begin
     Result := obj.AsArray else
     Result := nil;
   {+}
-  {$IFDEF EXTEND_FORIN} // TODO: "pult": need check any combination
+  {$IFDEF EXTEND_FORIN} //#TODO: "pult": need check any combination
   // Always return value !
   if (Result = nil) and FSafeForIn then
   begin
@@ -7125,7 +7125,7 @@ end;
 
 destructor TSuperArray.Destroy;
 begin
-  Clear((*?{all:}True*)); // TODO: ?all
+  Clear((*?{all:}True*)); //#TODO: ?all
   if Assigned(FArray) then
   begin
     FreeMem(FArray);
@@ -7446,10 +7446,10 @@ begin
   if i <= BUFFER_SIZE then begin
     Pointer(pBuffer) := @Buffer;
     //function GetBytes(Chars: PChar; CharCount: Integer; Bytes: PByte; ByteCount: Integer): Integer; overload; inline;
-    size := TEncoding.ANSI.GetBytes(buf, size, PByte(pBuffer), BUFFER_SIZE); // TODO: two call TEncoding.ANSI => ?with TEncoding.ANSI
+    size := TEncoding.ANSI.GetBytes(buf, size, PByte(pBuffer), BUFFER_SIZE); //#TODO: two call TEncoding.ANSI => ?with TEncoding.ANSI
   end else begin
-////    aBuffer := TEncoding.ANSI.GetBytes({$ifdef FPC}MakeSOBytes{$ELSE}MakeSOString{$ENDIF}(buf, Size));      // TODO: optimize memory allocation
-    aBuffer := TEncoding.ANSI.GetBytes(MakeSOString(buf, Size));      // TODO: optimize memory allocation
+    //aBuffer := TEncoding.ANSI.GetBytes({$ifdef FPC}MakeSOBytes{$ELSE}MakeSOString{$ENDIF}(buf, Size)); //#TODO: optimize memory allocation
+    aBuffer := TEncoding.ANSI.GetBytes(MakeSOString(buf, Size)); //#TODO: optimize memory allocation
     size := Length(aBuffer);
     Pointer(pBuffer) := @(Pointer(aBuffer)^); // == @aBuffer[0]
   end;
@@ -7457,7 +7457,7 @@ begin
   {$IFDEF USE_TENCODING}
   aBuffer := MakeSOBytes(buf, Size);
   {$ELSE}
-  //TODO: FPC widestringmanager or ansistringmanager
+  //#TODO: FPC widestringmanager or ansistringmanager
   aBuffer := AnsiString(MakeSOString(buf, Size));
   {$ENDIF}
   size := Length(aBuffer);
@@ -7486,7 +7486,7 @@ begin
   i := TEncoding.UTF8.GetMaxByteCount(size);
   if i <= BUFFER_SIZE then begin
     Pointer(pBuffer) := @Buffer;
-    size := TEncoding.UTF8.GetBytes(buf, size, PByte(pBuffer), BUFFER_SIZE); // TODO: two call TEncoding.UTF8 => ?with TEncoding.UTF8
+    size := TEncoding.UTF8.GetBytes(buf, size, PByte(pBuffer), BUFFER_SIZE); //#TODO: two call TEncoding.UTF8 => ?with TEncoding.UTF8
   end else begin
     // slowly:
     //         ( because exiss convertation pwidechar to unicode )
@@ -7561,16 +7561,16 @@ end;
 {+.}
 
 function TSuperWriterSock.Append(buf: PSOChar; Size: Integer): Integer;
-{+} // TODO: Q>: ? buf contained terminator #0 or not ?
+{+} //#TODO: Q>: ? buf contained terminator #0 or not ?
 const
   BUFFER_SIZE = 1024;
 var
   Buffer: array[0..BUFFER_SIZE] of {$IFDEF DELPHI_UNICODE}Byte{$ELSE}AnsiChar{$ENDIF}; // +1 for UTF8
   pBuffer: {$IFDEF DELPHI_UNICODE}PByte{$ELSE}PAnsiChar{$ENDIF};
-  aBuffer: {$IFDEF DELPHI_UNICODE}TBytes{$ELSE}AnsiString{$ENDIF}; // TODO: ?move to internal field
+  aBuffer: {$IFDEF DELPHI_UNICODE}TBytes{$ELSE}AnsiString{$ENDIF}; //#TODO: ?move to internal field
   i: Integer;
 {+.}
-begin // TODO: test
+begin //#TODO: test
   Result := 0;
   if Size <= 0 then
     Exit;
@@ -7583,7 +7583,7 @@ begin // TODO: test
       i := TEncoding.UTF8.GetMaxByteCount(size);
       if i <= BUFFER_SIZE then begin
         Pointer(pBuffer) := @Buffer;
-        size := TEncoding.UTF8.GetBytes(buf, size, PByte(pBuffer), BUFFER_SIZE); // TODO: two call TEncoding.UTF8 => ?with TEncoding.UTF8
+        size := TEncoding.UTF8.GetBytes(buf, size, PByte(pBuffer), BUFFER_SIZE); //#TODO: two call TEncoding.UTF8 => ?with TEncoding.UTF8
       end else begin
         // slowly:
         //         ( because exiss convertation pwidechar to unicode )
@@ -7693,7 +7693,7 @@ end;
 
 destructor TSuperAvlTree.Destroy;
 begin
-  Clear((*?{all:}True*)); // TODO: ?all
+  Clear((*?{all:}True*)); //#TODO: ?all
   inherited;
 end;
 
@@ -9065,7 +9065,7 @@ begin
   end;
   Result := r.Name;
 end;
-//
+
 class function TSuperRttiContext.GetObjectDefault(r: TRttiObject; const obj: ISuperObject): ISuperObject;
 var
   A: TCustomAttribute;
@@ -9106,7 +9106,7 @@ begin
       end;
     end;
 end;
-//
+
 function TSuperRttiContext.AsType<T>(const obj: ISuperObject): T;
 var
   L: TMREWSyncHandle;
@@ -9323,7 +9323,7 @@ begin
   except
     Result := -1;
   end;
-end;//*)
+end;*)
 function SuperStringToSet(TypeInfo: PTypeInfo; const Value: string): Integer;
 // Safe implementation of "TypInfo.pas"."StringToSet(PTypeInfo...)" without Exceptions
 var
@@ -9338,17 +9338,13 @@ var
     i: Integer;
   begin
     i := 0;
-
     // scan til whitespace
     while not (CharInSet(P[i], [',', ' ', #0,']'])) do
       Inc(i);
-
     SetString(Result, P, i);
-
     // skip whitespace
     while (CharInSet(P[i], [',', ' ',']'])) do
       Inc(i);
-
     Inc(P, i);
   end;
 
@@ -9362,11 +9358,9 @@ begin
   Result := 0;
   if Value = '' then Exit;
   P := PChar(Value);
-
   // skip leading bracket and whitespace
   while (CharInSet(P^, ['[',' '])) do
     Inc(P);
-
   PEnumInfo := GetTypeData(TypeInfo)^.CompType;
   if PEnumInfo <> nil then
   begin
@@ -9405,7 +9399,6 @@ begin
     end;
   end;
 end; // function SuperStringToSet
-//*)
 
 function TSuperRttiContext.jFromSet(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean;
 var
@@ -9493,7 +9486,7 @@ begin
         Result := typ in [stInt, stDouble, stCurrency];
         if Result then begin
           Result := jFromFloat(ATypeInfo, o, Value);
-        {+} // pult: 2020.1217.0757
+        {+} // pult: 2020-12-17
         end else if (typ = stString) then begin
           Result := TryObjectToDate(o, dt);
           if Result then begin
@@ -9545,7 +9538,7 @@ var
   LValObj: ISuperObject;
   LRttiType: TRttiType;
   SFieldName: string;
-  SValue: string;
+//SValue: string;
   {$IFDEF USE_REFLECTION} // https://code.google.com/p/superobject/issues/detail?id=16
   LRttiProp: TRttiProperty;
   LBasedType: PTypeInfo;
@@ -9662,12 +9655,17 @@ begin
               tkString, tkLString, tkUString, tkWString: begin
                 SFieldName := GetFieldName(LRttiField);
                 LValObj := so_get_field_obj();
-                if Assigned(LValObj) and (LValObj.DataType in [stNull .. stInt, stString]) then begin
+                {-if Assigned(LValObj) and (LValObj.DataType in [stNull .. stInt, stString]) then begin
                   SValue := LValObj.AsString;
                   LRttiField.SetValue(Value.AsObject, SValue);
+                end;}
+                if Assigned(LValObj) then begin
+                  OK := jFromString(LTypeInfo, LValObj, LValue);
+                  if OK then
+                    LRttiField.SetValue(Value.AsObject, LValue);
                 end;
               end;
-              {tkChar, tkWChar: begin
+              {-tkChar, tkWChar: begin
                 SFieldName := GetFieldName(LRttiField);
                 LValObj := so_get_field_obj();
                 if Assigned(LValObj) and (LValObj.DataType in [stNull .. stInt, stString]) then begin
@@ -9694,7 +9692,7 @@ begin
                     LRttiField.SetValue(Value.AsObject, LValue);
                 end;
               end;
-              {tkInteger, tkInt64: begin
+              {-tkInteger, tkInt64: begin
                 SFieldName := GetFieldName(LRttiField);
                 LValObj := so_get_field_obj();
                 if Assigned(LValObj) then begin
@@ -9726,7 +9724,7 @@ begin
                 SFieldName := GetFieldName(LRttiField);
                 LValObj := so_get_field_obj();
                 if Assigned(LValObj) then begin
-                  {if LValObj.DataType = stNull then
+                  {-if LValObj.DataType = stNull then
                     LRttiField.SetValue(Value.AsObject, 0)
                   else if LValObj.DataType in [stDouble, stCurrency, stInt] then
                     LRttiField.SetValue(Value.AsObject, LValObj.AsDouble);}
@@ -10026,7 +10024,7 @@ begin
 end; // function TSuperRttiContext.jFromDynArray
 
 function TSuperRttiContext.jFromArray(ATypeInfo: PTypeInfo; const obj: ISuperObject; var Value: TValue): Boolean;
-var // TODO: FPC: Check
+var //#TODO: FPC: Check
   ArrayData: {$IFDEF FPC}^TArrayTypeData{$ELSE}PArrayTypeData{$ENDIF};
   idx: Integer;
   function ProcessDim(dim: Byte; const o: ISuperobject): Boolean;
@@ -10043,7 +10041,7 @@ var // TODO: FPC: Check
 //      //a := @GetTypeData(ArrayData.Dims[dim-1]).ArrayData;
 //      a := @dt.ArrayData;
 //      {$ELSE !FPC}
-//      {$IF CompilerVersion >= 34.00} // TODO: check
+//      {$IF CompilerVersion >= 34.00} //#TODO: check
 //      //a := PTypeData(
 //      //     @GetTypeData(ArrayData.Dims[dim-1]^).ArrayData
 //      //);
@@ -10629,7 +10627,7 @@ var
 begin
   Result := nil;
   if not Value.IsEmpty then begin
-    {$IFDEF FPC} // TODO: FPC Check
+    {$IFDEF FPC} //#TODO: FPC Check
     if Value.DataSize = SizeOf(TVarData) then begin
       Value.ExtractRawData(@vd);
       LValue := Variant(vd);
@@ -10743,7 +10741,7 @@ begin
     end;
   end else begin
     Result := TSuperObject.Create(stArray);
-    ProcessDim(1, Result); // TODO: FForceDefault
+    ProcessDim(1, Result); //#TODO: FForceDefault
   end;
 end; // function TSuperRttiContext.jToArray
 
