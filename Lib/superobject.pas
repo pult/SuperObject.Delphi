@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2024.0125.2250
+{ superobject.pas } // version: 2024.0126.1200
 (*
  *                         Super Object Toolkit
  *
@@ -252,8 +252,8 @@ uses
   ;
 
 const
-  SuperObjectVersion = 202401252250;
-  //         format : "yyyymmddhhnn"
+  SuperObjectVersion = 202401261200;
+  //#        format : "yyyymmddhhnn"
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
   {$EXTERNALSYM SuperObjectVerInfo}
@@ -266,7 +266,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202401252250}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202401261200}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -305,7 +305,7 @@ const  { not change values }
 
   {$IFDEF USE_REFLECTION}
   FieldsVisibilityDefault = [{mvPrivate, mvProtected,} mvPublic, mvPublished];
-  PropertiesVisibilityDefault = [mvPublished];
+  PropertiesVisibilityDefault = [mvPublic, mvPublished];
   {$ENDIF}
 
 type
