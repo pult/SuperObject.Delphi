@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2024.0126.1310
+{ superobject.pas } // version: 2024.0918.0600
 (*
  *                         Super Object Toolkit
  *
@@ -36,7 +36,6 @@
  *   + Delphi 2010 RTTI marshalling
  *   + Delphi 10.4 Sydney RTTI marshalling of "Managed Records"
  *
- *
  *)
 
 {$IFDEF FPC}
@@ -50,7 +49,6 @@
 
 {+}
 (*
-
 *
 * #TODO: need check/fix issues:
 *
@@ -130,7 +128,9 @@ unit superobject;
   {$IFDEF UNICODE} // for "{$mode delphiunicode}"
     {$define FPC_UNICODE}
   {$ENDIF}
-  {$define HAVE_RTTI} // optional
+  {$if (fpc_version>3) or ( (fpc_version=3) and ((fpc_release>3) or ((fpc_release=3) and (fpc_patch>0))) )}
+    {$define HAVE_RTTI} // optional ; https://wiki.freepascal.org/Custom_Attributes
+  {$ifend}
   {$define NEED_FORMATSETTINGS} // optional
   //?{$POINTERMATH OFF}
   //{$define HAVE_FOR_IN}
