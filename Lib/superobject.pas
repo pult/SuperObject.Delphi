@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2024.0925.1030
+{ superobject.pas } // version: 2024.0925.1050
 (*
  *                         Super Object Toolkit
  *
@@ -79,11 +79,19 @@ unit superobject;
 {+}
 {$warnings on}
 {$hints on}
-{$ifdef FPC}
+
+{$IFNDEF FPC}
+  {$IFDEF CONDITIONALEXPRESSIONS}{$IF CompilerVersion >= 33.00} // 33 == DX 10.3 Rio; 24 == XE3
+    {$WARN COMPARING_SIGNED_UNSIGNED OFF} // W1023 // Comparing signed and unsigned types - widened both operandsDuplicate constructor '%s.%s' with identical parameters will be inacessible from C++
+                                          // W1023 for FPC code: (fpc_version>3)
+  {$IFEND}{$ENDIF CONDITIONALEXPRESSIONS}
+{$ENDIF}
+
+{$IFNDEF FPC}
   {$notes on}
   //{$POINTERMATH ON}
   {$warn 6058 off} // -vm6058 Note: * inlie not inlined
-{$endif}
+{$ENDIF}
 
 {$T+} // Typed Pointer
 
