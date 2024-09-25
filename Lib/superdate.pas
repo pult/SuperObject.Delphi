@@ -1,4 +1,4 @@
-{ superdate.pas } // version: 2024.0925.1050
+{ superdate.pas } // version: 2024.0925.1200
 unit superdate;
 
 interface
@@ -1368,7 +1368,7 @@ begin
         LValue := DateTimeToSQLTimeStamp(Value);
         Value := SQLTimeStampToDateTime(LocalToUTC(FTzInfo, LValue));
         {$ELSE !SQLTIMESTAMP}
-        {$if defined(FPC) and defined(fpc_version) and ((fpc_version>3) or ( (fpc_version=3) and ((fpc_release>3) or ((fpc_release=3) and (fpc_patch>0))) ))}
+        {$if defined(FPC) and defined(fpc_version) and ((fpc_version<3) or ( (fpc_version=3) and ((fpc_release<3) or ((fpc_release=3) and (fpc_patch=0))) ))}
         Value := LocalTimeToUniversal(Value); // no member "TTimeZone.Local"
         {$else}
         Value := TTimeZone.Local.ToUniversalTime(Value);
@@ -1403,7 +1403,7 @@ begin
     LValue := DateTimeToSQLTimeStamp(AValue);
     LDate := SQLTimeStampToDateTime(UTCToLocal(FTzInfo, LValue));
     {$ELSE !SQLTIMESTAMP}
-    {$if defined(FPC) and defined(fpc_version) and ((fpc_version>3) or ( (fpc_version=3) and ((fpc_release>3) or ((fpc_release=3) and (fpc_patch>0))) ))}
+        {$if defined(FPC) and defined(fpc_version) and ((fpc_version<3) or ( (fpc_version=3) and ((fpc_release<3) or ((fpc_release=3) and (fpc_patch=0))) ))}
     LDate := LocalTimeToUniversal(AValue); // no member "TTimeZone.Local"
     {$else}
     LDate := TTimeZone.Local.ToUniversalTime(AValue);
@@ -1437,7 +1437,7 @@ begin
     Result := SQLTimeStampToDateTime(UTCToLocal(FTzInfo, LValue));
     {$ELSE !SQLTIMESTAMP}
     Result := TTimeZone.Local.ToLocalTime(IncSecond(UnixDateDelta, AValue));
-    {$if defined(FPC) and defined(fpc_version) and ((fpc_version>3) or ( (fpc_version=3) and ((fpc_release>3) or ((fpc_release=3) and (fpc_patch>0))) ))}
+        {$if defined(FPC) and defined(fpc_version) and ((fpc_version<3) or ( (fpc_version=3) and ((fpc_release<3) or ((fpc_release=3) and (fpc_patch=0))) ))}
     Result := UniversalTimeToLocal(AValue); // no member "TTimeZone.Local"
     {$else}
     Result := TTimeZone.Local.ToLocalTime(IncSecond(UnixDateDelta, AValue));
