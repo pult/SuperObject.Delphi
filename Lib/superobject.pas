@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2024.0918.0600
+{ superobject.pas } // version: 2024.0925.1030
 (*
  *                         Super Object Toolkit
  *
@@ -128,7 +128,7 @@ unit superobject;
   {$IFDEF UNICODE} // for "{$mode delphiunicode}"
     {$define FPC_UNICODE}
   {$ENDIF}
-  {$if (fpc_version>3) or ( (fpc_version=3) and ((fpc_release>3) or ((fpc_release=3) and (fpc_patch>0))) )}
+  {$if defined(fpc_version) and ((fpc_version>3) or ( (fpc_version=3) and ((fpc_release>3) or ((fpc_release=3) and (fpc_patch>0))) ))}
     {$define HAVE_RTTI} // optional ; https://wiki.freepascal.org/Custom_Attributes
   {$ifend}
   {$define NEED_FORMATSETTINGS} // optional
