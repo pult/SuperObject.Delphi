@@ -1,9 +1,16 @@
-{ superdate.pas } // version: 2020.1216.2117
+{ superdate.pas } // version: 2024.0925.1050
 unit superdate;
 
 interface
 
 {+}
+{$IFNDEF FPC}
+  {$IFDEF CONDITIONALEXPRESSIONS}{$IF CompilerVersion >= 33.00} // 33 == DX 10.3 Rio; 24 == XE3
+    {$WARN COMPARING_SIGNED_UNSIGNED OFF} // W1023 // Comparing signed and unsigned types - widened both operandsDuplicate constructor '%s.%s' with identical parameters will be inacessible from C++
+                                          // W1023 for FPC code: (fpc_version>3)
+  {$IFEND}{$ENDIF CONDITIONALEXPRESSIONS}
+{$ENDIF}
+
 {$IFDEF FPC}
   //-- {$mode objfpc}
   {$mode delphi}
@@ -1361,7 +1368,11 @@ begin
         LValue := DateTimeToSQLTimeStamp(Value);
         Value := SQLTimeStampToDateTime(LocalToUTC(FTzInfo, LValue));
         {$ELSE !SQLTIMESTAMP}
+        {$if defined(FPC) and defined(fpc_version) and ((fpc_version>3) or ( (fpc_version=3) and ((fpc_release>3) or ((fpc_release=3) and (fpc_patch>0))) ))}
+        Value := LocalTimeToUniversal(Value); // no member "TTimeZone.Local"
+        {$else}
         Value := TTimeZone.Local.ToUniversalTime(Value);
+        {$ifend}
         {$ENDIF !SQLTIMESTAMP}
         {$else}
         Value := LocalTimeToUniversal(Value);
@@ -1392,7 +1403,11 @@ begin
     LValue := DateTimeToSQLTimeStamp(AValue);
     LDate := SQLTimeStampToDateTime(UTCToLocal(FTzInfo, LValue));
     {$ELSE !SQLTIMESTAMP}
+    {$if defined(FPC) and defined(fpc_version) and ((fpc_version>3) or ( (fpc_version=3) and ((fpc_release>3) or ((fpc_release=3) and (fpc_patch>0))) ))}
+    LDate := LocalTimeToUniversal(AValue); // no member "TTimeZone.Local"
+    {$else}
     LDate := TTimeZone.Local.ToUniversalTime(AValue);
+    {$ifend}
     {$ENDIF !SQLTIMESTAMP}
     {$else}
     LDate := LocalTimeToUniversal(AValue);
@@ -1422,6 +1437,11 @@ begin
     Result := SQLTimeStampToDateTime(UTCToLocal(FTzInfo, LValue));
     {$ELSE !SQLTIMESTAMP}
     Result := TTimeZone.Local.ToLocalTime(IncSecond(UnixDateDelta, AValue));
+    {$if defined(FPC) and defined(fpc_version) and ((fpc_version>3) or ( (fpc_version=3) and ((fpc_release>3) or ((fpc_release=3) and (fpc_patch>0))) ))}
+    Result := UniversalTimeToLocal(AValue); // no member "TTimeZone.Local"
+    {$else}
+    Result := TTimeZone.Local.ToLocalTime(IncSecond(UnixDateDelta, AValue));
+    {$ifend}
     {$ENDIF !SQLTIMESTAMP}
     {$else}
     Result := UniversalTimeToLocal(AValue);
