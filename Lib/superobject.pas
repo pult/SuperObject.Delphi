@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2025.0115.0300
+{ superobject.pas } // version: 2025.0115.0340
 (*
  *                         Super Object Toolkit
  *
@@ -181,6 +181,10 @@ unit superobject;
 {$undef EXTEND_FORIN}
 {$define EXTEND_FORIN} { optional } //#TODO: "pult": need check any combination
 {+.}
+{+} // Big JSON: https://github.com/pult/SuperObject.Delphi/issues/9
+{$undef BIG_JSON}
+{$define BIG_JSON} // optional
+{+.}
 //
 {+}
 {$IFDEF IOS}
@@ -260,7 +264,7 @@ uses
   ;
 
 const
-  SuperObjectVersion = 202501150300;
+  SuperObjectVersion = 202501150340;
   //#        format : "yyyymmddhhnn"
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
@@ -274,7 +278,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202501150300}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202501150340}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
@@ -327,6 +331,8 @@ type
   {+} // https://code.google.com/p/superobject/issues/detail?id=24
   ISuperArray = interface;
   {+.}
+
+  TBigInt = {$IFNDEF BIG_JSON}Integer{$ELSE} {$if declared(NativeInt)}NativeInt{$else}Comp{$ifend} {$ENDIF};
 
 (* AVL Tree
  *  This is a "special" autobalanced AVL tree
@@ -440,7 +446,7 @@ type
     property Current: TSuperAvlEntry read GetIter;
   end;
 
-  TSuperObjectArray = array[0..(high({$IFDEF FPC}PtrInt{$ELSE}Integer{$ENDIF}) div sizeof(TSuperObject))-1] of ISuperObject;
+  TSuperObjectArray = array[0..(high({$IFDEF FPC}PtrInt{$ELSE}TBigInt{$ENDIF}) div sizeof(TSuperObject))-1] of ISuperObject;
   PSuperObjectArray = ^TSuperObjectArray;
 
   {+}
@@ -489,40 +495,40 @@ type
     {+}
     function GetEnumerator: TSuperArrayEnumerator;
     {+.}
-    function GetO(const index: integer): ISuperObject;
-    procedure PutO(const index: integer; const Value: ISuperObject);
-    function GetB(const index: integer): Boolean;
-    procedure PutB(const index: integer; Value: Boolean);
-    function GetI(const index: integer): SuperInt;
-    procedure PutI(const index: integer; Value: SuperInt);
-    function GetD(const index: integer): Double;
-    procedure PutD(const index: integer; Value: Double);
-    function GetC(const index: integer): Currency;
-    procedure PutC(const index: integer; Value: Currency);
-    function GetS(const index: integer): SOString;
-    procedure PutS(const index: integer; const Value: SOString);
+    function GetO(const index: TBigInt): ISuperObject;
+    procedure PutO(const index: TBigInt; const Value: ISuperObject);
+    function GetB(const index: TBigInt): Boolean;
+    procedure PutB(const index: TBigInt; Value: Boolean);
+    function GetI(const index: TBigInt): SuperInt;
+    procedure PutI(const index: TBigInt; Value: SuperInt);
+    function GetD(const index: TBigInt): Double;
+    procedure PutD(const index: TBigInt; Value: Double);
+    function GetC(const index: TBigInt): Currency;
+    procedure PutC(const index: TBigInt; Value: Currency);
+    function GetS(const index: TBigInt): SOString;
+    procedure PutS(const index: TBigInt; const Value: SOString);
 {$IFDEF SUPER_METHOD}
-    function GetM(const index: integer): TSuperMethod;
-    procedure PutM(const index: integer; Value: TSuperMethod);
+    function GetM(const index: TBigInt): TSuperMethod;
+    procedure PutM(const index: TBigInt; Value: TSuperMethod);
 {$ENDIF}
-    function GetN(const index: integer): ISuperObject;
-    procedure PutN(const index: integer; const Value: ISuperObject);
-    function Add(const Data: ISuperObject): Integer;
-    function Delete(index: Integer): ISuperObject;
-    procedure Insert(index: Integer; const value: ISuperObject);
+    function GetN(const index: TBigInt): ISuperObject;
+    procedure PutN(const index: TBigInt; const Value: ISuperObject);
+    function Add(const Data: ISuperObject): TBigInt;
+    function Delete(index: TBigInt): ISuperObject;
+    procedure Insert(index: TBigInt; const value: ISuperObject);
     procedure Clear(all: boolean = false);
     procedure Pack(all: boolean);
-    function  Length: Integer;
+    function  Length: TBigInt;
 
-    property N[const index: integer]: ISuperObject read GetN write PutN;
-    property O[const index: integer]: ISuperObject read GetO write PutO; default;
-    property B[const index: integer]: boolean read GetB write PutB;
-    property I[const index: integer]: SuperInt read GetI write PutI;
-    property D[const index: integer]: Double read GetD write PutD;
-    property C[const index: integer]: Currency read GetC write PutC;
-    property S[const index: integer]: SOString read GetS write PutS;
+    property N[const index: TBigInt]: ISuperObject read GetN write PutN;
+    property O[const index: TBigInt]: ISuperObject read GetO write PutO; default;
+    property B[const index: TBigInt]: boolean read GetB write PutB;
+    property I[const index: TBigInt]: SuperInt read GetI write PutI;
+    property D[const index: TBigInt]: Double read GetD write PutD;
+    property C[const index: TBigInt]: Currency read GetC write PutC;
+    property S[const index: TBigInt]: SOString read GetS write PutS;
 {$IFDEF SUPER_METHOD}
-    property M[const index: integer]: TSuperMethod read GetM write PutM;
+    property M[const index: TBigInt]: TSuperMethod read GetM write PutM;
 {$ENDIF}
   end;
   {+.}
@@ -530,58 +536,58 @@ type
   TSuperArray = class({+}TInterfacedObject{+.}, ISuperArray)
   private
     FArray: PSuperObjectArray;
-    FLength: Integer;
-    FSize: Integer;
-    procedure Expand(max: Integer);
+    FLength: TBigInt;
+    FSize: TBigInt;
+    procedure Expand(const max: TBigInt);
   protected
-    function GetO(const index: integer): ISuperObject;
-    procedure PutO(const index: integer; const Value: ISuperObject);
-    function GetB(const index: integer): Boolean;
-    procedure PutB(const index: integer; Value: Boolean);
-    function GetI(const index: integer): SuperInt;
-    procedure PutI(const index: integer; Value: SuperInt);
-    function GetD(const index: integer): Double;
-    procedure PutD(const index: integer; Value: Double);
-    function GetC(const index: integer): Currency;
-    procedure PutC(const index: integer; Value: Currency);
-    function GetS(const index: integer): SOString;
-    procedure PutS(const index: integer; const Value: SOString);
+    function GetO(const index: TBigInt): ISuperObject;
+    procedure PutO(const index: TBigInt; const Value: ISuperObject);
+    function GetB(const index: TBigInt): Boolean;
+    procedure PutB(const index: TBigInt; Value: Boolean);
+    function GetI(const index: TBigInt): SuperInt;
+    procedure PutI(const index: TBigInt; Value: SuperInt);
+    function GetD(const index: TBigInt): Double;
+    procedure PutD(const index: TBigInt; Value: Double);
+    function GetC(const index: TBigInt): Currency;
+    procedure PutC(const index: TBigInt; Value: Currency);
+    function GetS(const index: TBigInt): SOString;
+    procedure PutS(const index: TBigInt; const Value: SOString);
 {$IFDEF SUPER_METHOD}
-    function GetM(const index: integer): TSuperMethod;
-    procedure PutM(const index: integer; Value: TSuperMethod);
+    function GetM(const index: TBigInt): TSuperMethod;
+    procedure PutM(const index: TBigInt; Value: TSuperMethod);
 {$ENDIF}
-    function GetN(const index: integer): ISuperObject;
-    procedure PutN(const index: integer; const Value: ISuperObject);
+    function GetN(const index: TBigInt): ISuperObject;
+    procedure PutN(const index: TBigInt; const Value: ISuperObject);
   public
     constructor Create; virtual;
     destructor Destroy; override;
     {+}
     function GetEnumerator: TSuperArrayEnumerator;
     {+.}
-    function Add(const Data: ISuperObject): Integer; overload;
-    function Add(Data: SuperInt): Integer; overload;
-    function Add(const Data: SOString): Integer; overload;
-    function Add(Data: Boolean): Integer; overload;
-    function Add(Data: Double): Integer; overload;
-    function AddC(const Data: Currency): Integer;
-    function Delete(index: Integer): ISuperObject;
-    procedure Insert(index: Integer; const value: ISuperObject);
+    function Add(const Data: ISuperObject): TBigInt; overload;
+    function Add(Data: SuperInt): TBigInt; overload;
+    function Add(const Data: SOString): TBigInt; overload;
+    function Add(Data: Boolean): TBigInt; overload;
+    function Add(Data: Double): TBigInt; overload;
+    function AddC(const Data: Currency): TBigInt;
+    function Delete(index: TBigInt): ISuperObject;
+    procedure Insert(index: TBigInt; const value: ISuperObject);
     procedure Clear(all: boolean = false);
     procedure Pack(all: boolean);
     {+} // https://code.google.com/p/superobject/issues/detail?id=24
-    //property Length: Integer read FLength;
-    function  Length: Integer;
+    //property Length: TBigInt read FLength;
+    function  Length: TBigInt;
     {+.}
 
-    property N[const index: integer]: ISuperObject read GetN write PutN;
-    property O[const index: integer]: ISuperObject read GetO write PutO; default;
-    property B[const index: integer]: boolean read GetB write PutB;
-    property I[const index: integer]: SuperInt read GetI write PutI;
-    property D[const index: integer]: Double read GetD write PutD;
-    property C[const index: integer]: Currency read GetC write PutC;
-    property S[const index: integer]: SOString read GetS write PutS;
+    property N[const index: TBigInt]: ISuperObject read GetN write PutN;
+    property O[const index: TBigInt]: ISuperObject read GetO write PutO; default;
+    property B[const index: TBigInt]: boolean read GetB write PutB;
+    property I[const index: TBigInt]: SuperInt read GetI write PutI;
+    property D[const index: TBigInt]: Double read GetD write PutD;
+    property C[const index: TBigInt]: Currency read GetC write PutC;
+    property S[const index: TBigInt]: SOString read GetS write PutS;
 {$IFDEF SUPER_METHOD}
-    property M[const index: integer]: TSuperMethod read GetM write PutM;
+    property M[const index: TBigInt]: TSuperMethod read GetM write PutM;
 {$ENDIF}
   end;
 
@@ -7006,38 +7012,38 @@ begin
 end;
 {+.}
 
-function TSuperArray.Add(const Data: ISuperObject): Integer;
+function TSuperArray.Add(const Data: ISuperObject): TBigInt;
 begin
   Result := FLength;
   PutO(Result, data);
 end;
 
-function TSuperArray.Add(Data: SuperInt): Integer;
+function TSuperArray.Add(Data: SuperInt): TBigInt;
 begin
   Result := Add(TSuperObject.Create(Data));
 end;
 
-function TSuperArray.Add(const Data: SOString): Integer;
+function TSuperArray.Add(const Data: SOString): TBigInt;
 begin
   Result := Add(TSuperObject.Create(Data));
 end;
 
-function TSuperArray.Add(Data: Boolean): Integer;
+function TSuperArray.Add(Data: Boolean): TBigInt;
 begin
   Result := Add(TSuperObject.Create(Data));
 end;
 
-function TSuperArray.Add(Data: Double): Integer;
+function TSuperArray.Add(Data: Double): TBigInt;
 begin
   Result := Add(TSuperObject.Create(Data));
 end;
 
-function TSuperArray.AddC(const Data: Currency): Integer;
+function TSuperArray.AddC(const Data: Currency): TBigInt;
 begin
   Result := Add(TSuperObject.CreateCurrency(Data));
 end;
 
-function TSuperArray.Delete(index: Integer): ISuperObject;
+function TSuperArray.Delete(index: TBigInt): ISuperObject;
 begin
   if (Index >= 0) and (Index < FLength) then
   begin
@@ -7053,7 +7059,7 @@ begin
   end;
 end;
 
-procedure TSuperArray.Insert(index: Integer; const value: ISuperObject);
+procedure TSuperArray.Insert(index: TBigInt; const value: ISuperObject);
 begin
   if (Index >= 0) then
   if (index < FLength) then
@@ -7072,7 +7078,7 @@ end;
 
 procedure TSuperArray.Clear(all: boolean);
 var
-  j: Integer;
+  j: TBigInt;
   so: ^ISuperObject;
 begin
   for j := FLength - 1 downto 0 do
@@ -7090,7 +7096,7 @@ end;
 
 procedure TSuperArray.Pack(all: boolean);
 var
-  PackedCount, StartIndex, EndIndex, j: Integer;
+  PackedCount, StartIndex, EndIndex, j: TBigInt;
 begin
   if FLength > 0 then
   begin
@@ -7149,9 +7155,9 @@ begin
 end;
 {+.}
 
-procedure TSuperArray.Expand(max: Integer);
+procedure TSuperArray.Expand(const max: TBigInt);
 var
-  new_size: Integer;
+  new_size: TBigInt;
 begin
   if (max < FSize) then
     Exit;
@@ -7163,14 +7169,14 @@ begin
   FSize := new_size;
 end;
 
-function TSuperArray.GetO(const index: Integer): ISuperObject;
+function TSuperArray.GetO(const index: TBigInt): ISuperObject;
 begin
   if(index >= FLength) then
     Result := nil else
     Result := FArray^[index];
 end;
 
-function TSuperArray.GetB(const index: integer): Boolean;
+function TSuperArray.GetB(const index: TBigInt): Boolean;
 var
   obj: ISuperObject;
 begin
@@ -7180,7 +7186,7 @@ begin
     Result := false;
 end;
 
-function TSuperArray.GetD(const index: integer): Double;
+function TSuperArray.GetD(const index: TBigInt): Double;
 var
   obj: ISuperObject;
 begin
@@ -7190,7 +7196,7 @@ begin
     Result := 0.0;
 end;
 
-function TSuperArray.GetI(const index: integer): SuperInt;
+function TSuperArray.GetI(const index: TBigInt): SuperInt;
 var
   obj: ISuperObject;
 begin
@@ -7200,7 +7206,7 @@ begin
     Result := 0;
 end;
 
-function TSuperArray.GetS(const index: integer): SOString;
+function TSuperArray.GetS(const index: TBigInt): SOString;
 var
   obj: ISuperObject;
 begin
@@ -7210,38 +7216,38 @@ begin
     Result := '';
 end;
 
-procedure TSuperArray.PutO(const index: Integer; const Value: ISuperObject);
+procedure TSuperArray.PutO(const index: TBigInt; const Value: ISuperObject);
 begin
   Expand(index);
   FArray^[index] := value;
   if(FLength <= index) then FLength := index + 1;
 end;
 
-function TSuperArray.GetN(const index: integer): ISuperObject;
+function TSuperArray.GetN(const index: TBigInt): ISuperObject;
 begin
   Result := GetO(index);
   if Result = nil then
     Result := TSuperObject.Create(stNull);
 end;
 
-procedure TSuperArray.PutN(const index: integer; const Value: ISuperObject);
+procedure TSuperArray.PutN(const index: TBigInt; const Value: ISuperObject);
 begin
   if Value <> nil then
     PutO(index, Value) else
     PutO(index, TSuperObject.Create(stNull));
 end;
 
-procedure TSuperArray.PutB(const index: integer; Value: Boolean);
+procedure TSuperArray.PutB(const index: TBigInt; Value: Boolean);
 begin
   PutO(index, TSuperObject.Create(Value));
 end;
 
-procedure TSuperArray.PutD(const index: integer; Value: Double);
+procedure TSuperArray.PutD(const index: TBigInt; Value: Double);
 begin
   PutO(index, TSuperObject.Create(Value));
 end;
 
-function TSuperArray.GetC(const index: integer): Currency;
+function TSuperArray.GetC(const index: TBigInt): Currency;
 var
   obj: ISuperObject;
 begin
@@ -7251,23 +7257,23 @@ begin
     Result := 0.0;
 end;
 
-procedure TSuperArray.PutC(const index: integer; Value: Currency);
+procedure TSuperArray.PutC(const index: TBigInt; Value: Currency);
 begin
   PutO(index, TSuperObject.CreateCurrency(Value));
 end;
 
-procedure TSuperArray.PutI(const index: integer; Value: SuperInt);
+procedure TSuperArray.PutI(const index: TBigInt; Value: SuperInt);
 begin
   PutO(index, TSuperObject.Create(Value));
 end;
 
-procedure TSuperArray.PutS(const index: integer; const Value: SOString);
+procedure TSuperArray.PutS(const index: TBigInt; const Value: SOString);
 begin
   PutO(index, TSuperObject.Create(Value));
 end;
 
 {$IFDEF SUPER_METHOD}
-function TSuperArray.GetM(const index: integer): TSuperMethod;
+function TSuperArray.GetM(const index: TBigInt): TSuperMethod;
 var
   v: ISuperObject;
 begin
@@ -7279,7 +7285,7 @@ end;
 {$ENDIF}
 
 {$IFDEF SUPER_METHOD}
-procedure TSuperArray.PutM(const index: integer; Value: TSuperMethod);
+procedure TSuperArray.PutM(const index: TBigInt; Value: TSuperMethod);
 begin
   PutO(index, TSuperObject.Create(Value));
 end;
