@@ -87,7 +87,7 @@ unit superobject;
   {$IFEND}{$ENDIF CONDITIONALEXPRESSIONS}
 {$ENDIF}
 
-{$IFNDEF FPC}
+{$IFDEF FPC}
   {$notes on}
   //{$POINTERMATH ON}
   {$warn 6058 off} // -vm6058 Note: * inlie not inlined
