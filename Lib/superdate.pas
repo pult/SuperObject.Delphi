@@ -1437,7 +1437,7 @@ begin
     Result := SQLTimeStampToDateTime(UTCToLocal(FTzInfo, LValue));
     {$ELSE !SQLTIMESTAMP}
     Result := TTimeZone.Local.ToLocalTime(IncSecond(UnixDateDelta, AValue));
-        {$if defined(FPC) and defined(fpc_version) and ((fpc_version<3) or ( (fpc_version=3) and ((fpc_release<3) or ((fpc_release=3) and (fpc_patch=0))) ))}
+    {$if defined(FPC) and defined(fpc_version) and ((fpc_version<3) or ( (fpc_version=3) and ((fpc_release<3) or ((fpc_release=3) and (fpc_patch=0))) ))}
     Result := UniversalTimeToLocal(AValue); // no member "TTimeZone.Local"
     {$else}
     Result := TTimeZone.Local.ToLocalTime(IncSecond(UnixDateDelta, AValue));
