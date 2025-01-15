@@ -1,4 +1,4 @@
-{ superobject.pas } // version: 2024.0925.1050
+{ superobject.pas } // version: 2025.0115.0300
 (*
  *                         Super Object Toolkit
  *
@@ -81,7 +81,7 @@ unit superobject;
 {$hints on}
 
 {$IFNDEF FPC}
-  {$IFDEF CONDITIONALEXPRESSIONS}{$IF CompilerVersion >= 33.00} // 33 == DX 10.3 Rio; 24 == XE3
+  {$IFDEF CONDITIONALEXPRESSIONS}{$IF CompilerVersion >= 18.50} // 33 == DX 10.3 Rio; 24 == XE3; 18.50 = Delphi 2007 Up
     {$WARN COMPARING_SIGNED_UNSIGNED OFF} // W1023 // Comparing signed and unsigned types - widened both operandsDuplicate constructor '%s.%s' with identical parameters will be inacessible from C++
                                           // W1023 for FPC code: (fpc_version>3)
   {$IFEND}{$ENDIF CONDITIONALEXPRESSIONS}
@@ -260,7 +260,7 @@ uses
   ;
 
 const
-  SuperObjectVersion = 202401261310;
+  SuperObjectVersion = 202501150300;
   //#        format : "yyyymmddhhnn"
   {$EXTERNALSYM SuperObjectVersion}
   SuperObjectVerInfo = 'contributor: pult';
@@ -274,7 +274,7 @@ const
   {$ENDIF}
   {$IFDEF SOCONDEXPR} // FPC or Delphi6 Up
     //{$ifndef FPC}{$warn comparison_true off}{$endif}
-    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202401261310}
+    {$if declared(SuperObjectVersion)} {$if SuperObjectVersion < 202501150300}
       {$MESSAGE FATAL 'Required update of "superobject" library'} {$ifend}
     {$else}
       {$MESSAGE FATAL 'Unknown version of "superobject" library'}
